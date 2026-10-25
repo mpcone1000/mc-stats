@@ -219,7 +219,16 @@ public class Main {
                 speichere(lauf);
                 return;
             }
-            ServerStatusInfo info = status(HOST, port);
+            ServerStatusInfo info;
+            try {
+                info = status(HOST, port);
+            } catch (Exception e) {
+                // Aternos faehrt gerade hoch oder runter
+                lauf.addProperty("status", "server_aus");
+                lauf.addProperty("grund", "Der Server startet oder stoppt gerade.");
+                speichere(lauf);
+                return;
+            }
             JsonArray online = new JsonArray();
             boolean selbstOnline = false;
             if (info.getPlayerInfo() != null && info.getPlayerInfo().getPlayers() != null) {
