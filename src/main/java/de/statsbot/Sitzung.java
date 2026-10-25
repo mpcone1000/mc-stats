@@ -27,7 +27,17 @@ import org.geysermc.mcprotocollib.protocol.data.game.inventory.MoveToHotbarActio
 import org.geysermc.mcprotocollib.protocol.data.game.item.ItemStack;
 import org.geysermc.mcprotocollib.protocol.data.game.item.component.DataComponentTypes;
 import org.geysermc.mcprotocollib.protocol.data.game.item.component.DataComponents;
+import org.geysermc.mcprotocollib.protocol.data.game.entity.metadata.GlobalPos;
+import org.geysermc.mcprotocollib.protocol.data.game.entity.player.PlayerSpawnInfo;
+import org.geysermc.mcprotocollib.protocol.data.game.level.notify.ThunderStrengthValue;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound.ClientboundAwardStatsPacket;
+import org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound.ClientboundChangeDifficultyPacket;
+import org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound.ClientboundRespawnPacket;
+import org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound.entity.ClientboundRemoveMobEffectPacket;
+import org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound.entity.ClientboundUpdateMobEffectPacket;
+import org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound.entity.player.ClientboundSetHeldSlotPacket;
+import org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound.level.ClientboundGameEventPacket;
+import org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound.level.ClientboundSetTimePacket;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound.ClientboundLoginPacket;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound.ClientboundPlayerInfoUpdatePacket;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound.ClientboundSystemChatPacket;
@@ -57,6 +67,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -86,6 +98,7 @@ final class Sitzung {
     }
 
     private static final Pattern GEKAUFT = Pattern.compile("^\\[Shop\\] Gekauft: (\\d+)x? (.+?) f(?:ü|ue)r");
+    private static final Pattern POST = Pattern.compile("(?i)you have (\\d+) (?:new )?(?:messages?|mails?)");
     private static final Pattern KATEGORIE = Pattern.compile("(?i)kampf|combat|waffe|rüstung|ruestung|verschied|sonstig|misc|spezial|special|selten|rare|magie|totem|alles|items");
 
     private final String host;
@@ -104,6 +117,13 @@ final class Sitzung {
     private volatile double[] pos;
     private volatile float yaw, pitch, leben = -1;
     private volatile int essen = -1, level = -1;
+    private volatile float xpFortschritt = -1, saettigung = -1;
+    private volatile int entityId = Integer.MIN_VALUE, handSlot = -1;
+    private volatile String welt, spielmodus, letzterTod, schwierigkeit;
+    private volatile long tageszeit = -1;
+    private volatile boolean regen, gewitter;
+    private final Map<String, int[]> effekte = new ConcurrentHashMap<>();
+    private final Map<UUID, String> namen = new ConcurrentHashMap<>();
     private volatile JsonObject statistiken;
     private volatile boolean aktiv = true;
     private volatile Ende ende = Ende.FERTIG;
@@ -194,24 +214,57 @@ final class Sitzung {
             pos = new double[]{pp.getPosition().getX(), pp.getPosition().getY(), pp.getPosition().getZ()};
             yaw = pp.getYRot();
             pitch = pp.getXRot();
+        } else if (p instanceof ClientboundLoginPacket l) {
+            entityId = l.getEntityId();
+            welt(l.getCommonPlayerSpawnInfo());
+        } else if (p instanceof ClientboundRespawnPacket r) {
+            welt(r.getCommonPlayerSpawnInfo());
+        } else if (p instanceof ClientboundSetTimePacket t) {
+            for (var uhr : t.getClockUpdates().values()) {
+                tageszeit = uhr.totalTicks();
+                break;
+            }
+        } else if (p instanceof ClientboundGameEventPacket g) {
+            switch (g.getNotification()) {
+                case START_RAINING -> regen = true;
+                case STOP_RAINING -> {
+                    regen = false;
+                    gewitter = false;
+                }
+                case THUNDER_LEVEL_CHANGE -> gewitter = g.getValue() instanceof ThunderStrengthValue tv && tv.getStrength() > 0.5f;
+                default -> { }
+            }
+        } else if (p instanceof ClientboundUpdateMobEffectPacket e) {
+            if (e.getEntityId() == entityId) effekte.put(e.getEffect().name().toLowerCase(), new int[]{e.getAmplifier(), e.getDuration()});
+        } else if (p instanceof ClientboundRemoveMobEffectPacket e) {
+            if (e.getEntityId() == entityId) effekte.remove(e.getEffect().name().toLowerCase());
+        } else if (p instanceof ClientboundSetHeldSlotPacket hs) {
+            handSlot = hs.getSlot();
+        } else if (p instanceof ClientboundChangeDifficultyPacket d) {
+            schwierigkeit = d.getDifficulty().name().toLowerCase();
         } else if (p instanceof ClientboundSetHealthPacket h) {
             if (leben >= 0 && h.getHealth() < leben) notaus(Ende.SCHADEN, "Schaden bekommen (" + leben + " -> " + h.getHealth() + ")");
             else if (h.getHealth() <= 8) notaus(Ende.SCHADEN, "Wenig Leben (" + h.getHealth() + ")");
             leben = h.getHealth();
             essen = h.getFood();
+            saettigung = h.getSaturation();
         } else if (p instanceof ClientboundPlayerCombatKillPacket) {
             notaus(Ende.SCHADEN, "Tod");
         } else if (p instanceof ClientboundSetExperiencePacket xp) {
             level = xp.getLevel();
+            xpFortschritt = xp.getExperience();
         } else if (p instanceof ClientboundAwardStatsPacket a) {
             statistiken = Main.statistikJson(a);
         } else if (p instanceof ClientboundAddEntityPacket e) {
-            wesen.add(new Object[]{e.getType().name(), e.getX(), e.getY(), e.getZ()});
+            wesen.add(new Object[]{e.getType().name(), e.getX(), e.getY(), e.getZ(), e.getUuid()});
         } else if (p instanceof ClientboundSystemChatPacket chat && !chat.isOverlay()) {
             for (String z : Main.text(chat.getContent()).split("\n")) if (!z.isBlank()) zeilen.add(z.strip());
         } else if (p instanceof ClientboundPlayerInfoUpdatePacket info) {
             for (PlayerListEntry e : info.getEntries()) {
-                if (e.getProfile() != null && e.getProfile().getName() != null) synchronized (spieler) { spieler.add(e.getProfile().getName()); }
+                if (e.getProfile() != null && e.getProfile().getName() != null) {
+                    synchronized (spieler) { spieler.add(e.getProfile().getName()); }
+                    if (e.getProfileId() != null) namen.put(e.getProfileId(), e.getProfile().getName());
+                }
             }
         } else if (p instanceof ClientboundContainerSetContentPacket ct) {
             if (ct.getContainerId() == 0) {
@@ -240,6 +293,14 @@ final class Sitzung {
             fensterId = -1;
             fenster = null;
         }
+    }
+
+    private void welt(PlayerSpawnInfo s) {
+        if (s == null) return;
+        if (s.getWorldName() != null) welt = s.getWorldName().asString();
+        if (s.getGameMode() != null) spielmodus = s.getGameMode().name().toLowerCase();
+        GlobalPos t = s.getLastDeathPos();
+        if (t != null) letzterTod = t.getX() + " " + t.getY() + " " + t.getZ() + " " + (t.getDimension() == null ? "" : t.getDimension().asString());
     }
 
     private void notaus(Ende e, String g) {
@@ -290,6 +351,8 @@ final class Sitzung {
                     case "kaufen" -> totemsKaufen(Math.max(1, Math.min(16, a.anzahl)));
                     case "einbauen" -> einbauen();
                     case "erkunden" -> erkunden();
+                    case "heim" -> teleport("home", "nach Hause");
+                    case "spawn" -> teleport("spawn", "zum Spawn");
                     default -> "Unbekannter Befehl";
                 };
                 a.status = "erledigt";
@@ -464,6 +527,36 @@ final class Sitzung {
         return t;
     }
 
+    /** Teleport-Befehl wie /home; wartet auf die neue Position (Essentials hat oft 3 Sekunden Wartezeit). */
+    private String teleport(String befehl, String ziel) throws InterruptedException {
+        double[] vorher = pos;
+        int z0 = zeilen.size();
+        befehl(befehl);
+        for (int i = 0; i < 140 && pos == vorher; i++) schlafe(50);
+        schlafe(400);
+        List<String> antwort = new ArrayList<>(zeilen.subList(Math.min(z0, zeilen.size()), zeilen.size()));
+        if (pos != vorher) return "Teleportiert " + ziel;
+        return antwort.isEmpty() ? "Keine Antwort vom Server" : "Server: " + antwort.get(antwort.size() - 1);
+    }
+
+    /** Ein Ausruestungsteil mit Haltbarkeit in Prozent (fuer die App). */
+    private static JsonObject gegenstand(ItemStack s, String platz) {
+        JsonObject o = new JsonObject();
+        o.addProperty("platz", platz);
+        String id = Items.name(s.getId());
+        o.addProperty("item", id);
+        if (s.getAmount() > 1) o.addProperty("anzahl", s.getAmount());
+        DataComponents d = s.getDataComponentsPatch();
+        Integer schaden = d == null ? null : d.get(DataComponentTypes.DAMAGE);
+        Integer max = d == null ? null : d.get(DataComponentTypes.MAX_DAMAGE);
+        if (max == null) max = Items.haltbarkeit(id);
+        if (max != null && max > 0) o.addProperty("prozent", Math.max(0, Math.round(100.0 * (max - (schaden == null ? 0 : schaden)) / max)));
+        if (d != null && d.get(DataComponentTypes.ENCHANTMENTS) != null) o.addProperty("verzaubert", true);
+        String n = anzeigeName(s);
+        if (!n.isEmpty()) o.addProperty("name", n);
+        return o;
+    }
+
     private void merkeFenster() {
         ItemStack[] f = fenster;
         if (f == null || fensterLog.size() > 6) return;
@@ -531,6 +624,25 @@ final class Sitzung {
         if (essen >= 0) lauf.addProperty("essen", essen);
         if (level >= 0) lauf.addProperty("level", level);
         if (statistiken != null) lauf.add("statistiken", statistiken);
+        if (xpFortschritt >= 0) lauf.addProperty("xpFortschritt", Math.round(xpFortschritt * 100));
+        if (saettigung >= 0) lauf.addProperty("saettigung", saettigung);
+        if (welt != null) lauf.addProperty("welt", welt);
+        if (spielmodus != null) lauf.addProperty("spielmodus", spielmodus);
+        if (letzterTod != null) lauf.addProperty("letzterTod", letzterTod);
+        if (schwierigkeit != null) lauf.addProperty("schwierigkeit", schwierigkeit);
+        if (tageszeit >= 0) lauf.addProperty("tageszeit", tageszeit % 24000);
+        if (pos != null) lauf.addProperty("wetter", gewitter ? "gewitter" : regen ? "regen" : "klar");
+        if (!effekte.isEmpty()) {
+            JsonArray ef = new JsonArray();
+            effekte.forEach((n, w) -> {
+                JsonObject o = new JsonObject();
+                o.addProperty("name", n);
+                o.addProperty("stufe", w[0] + 1);
+                o.addProperty("sekunden", w[1] < 0 ? -1 : w[1] / 20);
+                ef.add(o);
+            });
+            lauf.add("effekte", ef);
+        }
         if (pos != null) {
             JsonArray p = new JsonArray();
             for (double d : pos) p.add(Math.round(d));
@@ -545,12 +657,23 @@ final class Sitzung {
             JsonObject in = new JsonObject();
             zaehl.forEach(in::addProperty);
             lauf.add("inventar", in);
+            JsonArray ruestung = new JsonArray();
+            String[] teile = {"kopf", "brust", "beine", "fuesse"};
+            synchronized (inv) {
+                for (int i = 5; i <= 8; i++) if (inv[i] != null) ruestung.add(gegenstand(inv[i], teile[i - 5]));
+                if (inv[45] != null) ruestung.add(gegenstand(inv[45], "zweiteHand"));
+                if (handSlot >= 0 && handSlot <= 8 && inv[36 + handSlot] != null) lauf.add("hand", gegenstand(inv[36 + handSlot], "hand"));
+            }
+            lauf.add("ruestung", ruestung);
         }
         synchronized (fensterLog) { if (!fensterLog.isEmpty()) lauf.add("fenster", fensterLog); }
         JsonArray roh = lauf.has("nachrichten") ? lauf.getAsJsonArray("nachrichten") : new JsonArray();
         Map<Integer, JsonObject> top = new TreeMap<>();
         for (String z : zeilen) {
             roh.add(z);
+            Matcher post = POST.matcher(z);
+            if (post.find()) lauf.addProperty("post", Integer.parseInt(post.group(1)));
+            else if (z.toLowerCase().contains("no new mail")) lauf.addProperty("post", 0);
             Matcher m = Main.KONTOSTAND.matcher(z);
             if (m.find()) lauf.addProperty("kontostand", Main.betrag(m.group(1)));
             m = Main.RANG.matcher(z);
@@ -580,6 +703,14 @@ final class Sitzung {
                 if (Main.GEFAEHRLICH.contains((String) w[0]) && a < 16) gefahr.add(((String) w[0]).toLowerCase() + " " + Math.round(a) + "m");
             }
             if (!gefahr.isEmpty()) lauf.add("gefahrInDerNaehe", gefahr);
+            JsonArray nah = new JsonArray();
+            for (Object[] w : wesen) {
+                if (!"PLAYER".equals(w[0]) || w.length < 5) continue;
+                double dx = (double) w[1] - pos[0], dy = (double) w[2] - pos[1], dz = (double) w[3] - pos[2];
+                String n = namen.getOrDefault((UUID) w[4], "Jemand");
+                if (!n.equalsIgnoreCase(profil.getName())) nah.add(n + " " + Math.round(Math.sqrt(dx * dx + dy * dy + dz * dz)) + "m");
+            }
+            if (!nah.isEmpty()) lauf.add("spielerNah", nah);
         }
     }
 

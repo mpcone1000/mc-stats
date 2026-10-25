@@ -50,5 +50,31 @@ final class Items {
         "jungle_planks", "acacia_planks", "dark_oak_planks", "mangrove_planks", "cherry_planks", "bamboo_planks", "stone_bricks",
         "bricks", "end_stone", "basalt", "smooth_stone", "oak_log", "spruce_log", "birch_log", "glass", "white_wool", "sand", "gravel");
 
+    /** Volle Haltbarkeit (Vanilla-Werte), weil der Server sie meist nicht mitschickt. */
+    private static final Map<String, int[]> RUESTUNG = Map.of(
+        "leather", new int[]{55, 80, 75, 65}, "chainmail", new int[]{165, 240, 225, 195}, "iron", new int[]{165, 240, 225, 195},
+        "golden", new int[]{77, 112, 105, 91}, "diamond", new int[]{363, 528, 495, 429}, "netherite", new int[]{407, 592, 555, 481},
+        "copper", new int[]{121, 176, 165, 143});
+    private static final Map<String, Integer> WERKZEUG = Map.of("wooden", 59, "stone", 131, "copper", 190, "iron", 250,
+        "golden", 32, "diamond", 1561, "netherite", 2031);
+    private static final Map<String, Integer> EINZELN = Map.ofEntries(Map.entry("turtle_helmet", 275), Map.entry("elytra", 432),
+        Map.entry("shield", 336), Map.entry("trident", 250), Map.entry("bow", 384), Map.entry("crossbow", 465), Map.entry("mace", 500),
+        Map.entry("fishing_rod", 64), Map.entry("flint_and_steel", 64), Map.entry("shears", 238), Map.entry("brush", 64));
+
+    static Integer haltbarkeit(String n) {
+        Integer fest = EINZELN.get(n);
+        if (fest != null) return fest;
+        String[] teile = {"_helmet", "_chestplate", "_leggings", "_boots"};
+        for (int i = 0; i < teile.length; i++) {
+            if (!n.endsWith(teile[i])) continue;
+            int[] w = RUESTUNG.get(n.substring(0, n.length() - teile[i].length()));
+            if (w != null) return w[i];
+        }
+        for (String art : List.of("_sword", "_pickaxe", "_axe", "_shovel", "_hoe", "_spear")) {
+            if (n.endsWith(art)) return WERKZEUG.get(n.substring(0, n.length() - art.length()));
+        }
+        return null;
+    }
+
     private Items() {}
 }

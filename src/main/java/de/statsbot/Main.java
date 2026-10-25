@@ -118,16 +118,14 @@ public class Main {
             case "abfrage" -> abfrage();
             case "pruefen" -> {
                 // Nur Status, kein Join
-                ServerStatusInfo proxy = status(HOST, 25565);
-                String motd = text(proxy.getDescription());
-                System.out.println("Proxy: " + proxy.getVersionInfo().getVersionName() + " | " + motd.replace("\n", " "));
-                Matcher pm = PROXY_PORT.matcher(motd);
-                if (pm.find()) {
-                    ServerStatusInfo i = status(HOST, Integer.parseInt(pm.group(1)));
-                    System.out.println("Server: " + i.getVersionInfo().getVersionName() + " Protokoll " + i.getVersionInfo().getProtocolVersion()
-                        + " | online " + i.getPlayerInfo().getOnlinePlayers() + " " + i.getPlayerInfo().getPlayers().stream().map(GameProfile::getName).toList());
-                    System.out.println("Bot spricht Protokoll " + new MinecraftProtocol().getCodec().getProtocolVersion() + " (" + new MinecraftProtocol().getCodec().getMinecraftVersion() + ")");
+                Status st = statusMitWiederholung(HOST, 25565);
+                if (st == null) {
+                    System.out.println("Server nicht erreichbar");
+                } else {
+                    System.out.println("Version: " + st.version() + " (Protokoll " + st.protokoll() + ") | " + st.online() + "/" + st.max()
+                        + " online | Zustand: " + (zustand(st) == null ? "laeuft" : zustand(st)) + " | " + st.motd().replace("\n", " ").replace(HOST, "<adresse>"));
                 }
+                System.out.println("Bot spricht Protokoll " + new MinecraftProtocol().getCodec().getProtocolVersion() + " (" + new MinecraftProtocol().getCodec().getMinecraftVersion() + ")");
             }
             case "sende" -> {
                 // Testweise einen Befehl so einstellen, wie es die App tut: sende <befehl> [anzahl]
@@ -210,45 +208,49 @@ public class Main {
             String token = auth.getMinecraftToken().getUpToDate().getToken();
             lauf.addProperty("spieler", profil.getName());
 
-            // 1. Laeuft der Server? der Proxy verraet den echten Port
-            ServerStatusInfo proxy = status(HOST, 25565);
-            String motd = text(proxy.getDescription());
-            Matcher pm = PROXY_PORT.matcher(motd);
-            int port;
-            if (pm.find()) port = Integer.parseInt(pm.group(1));
-            else if (proxy.getVersionInfo().getVersionName().toLowerCase().contains("paper")) port = 25565;
-            else {
-                lauf.addProperty("status", "server_aus");
-                lauf.addProperty("grund", "Der Server ist gerade aus.");
-                speichere(lauf);
-                return;
+            // 1. Laeuft der Server? Eigene Abfrage, weil Aternos fuer "aus" eine Sonderantwort schickt
+            Status st = statusMitWiederholung(HOST, 25565);
+            int port = 25565;
+            if (st != null) {
+                Matcher pm = PROXY_PORT.matcher(st.motd());
+                if (pm.find()) {
+                    port = Integer.parseInt(pm.group(1));
+                    st = statusMitWiederholung(HOST, port);
+                }
             }
-            ServerStatusInfo info;
-            try {
-                info = status(HOST, port);
-            } catch (Exception e) {
-                // Aternos faehrt gerade hoch oder runter
+            String aus = st == null ? "Der Server ist gerade nicht erreichbar." : zustand(st);
+            if (st != null) {
+                lauf.addProperty("version", st.version());
+                lauf.addProperty("motd", st.motd());
+                lauf.addProperty("maxSpieler", st.max());
+                lauf.addProperty("onlineAnzahl", st.online());
+            }
+            if (aus != null) {
                 lauf.addProperty("status", "server_aus");
-                lauf.addProperty("grund", "Der Server startet oder stoppt gerade.");
+                lauf.addProperty("grund", aus);
                 speichere(lauf);
                 return;
             }
             JsonArray online = new JsonArray();
-            boolean selbstOnline = false;
-            if (info.getPlayerInfo() != null && info.getPlayerInfo().getPlayers() != null) {
-                for (GameProfile p : info.getPlayerInfo().getPlayers()) {
-                    online.add(p.getName());
-                    if (p.getName().equalsIgnoreCase(profil.getName())) selbstOnline = true;
-                }
+            boolean selbstOnline = false, unbekannt = false;
+            for (String n : st.spieler()) {
+                if (n.toLowerCase().contains("anonymous")) unbekannt = true;
+                else online.add(n);
+                if (n.equalsIgnoreCase(profil.getName())) selbstOnline = true;
             }
             lauf.add("online", online);
-            lauf.addProperty("onlineAnzahl", info.getPlayerInfo() == null ? 0 : info.getPlayerInfo().getOnlinePlayers());
-            lauf.addProperty("version", info.getVersionInfo().getVersionName());
 
-            // 2. Nicht joinen, wenn du selbst gerade spielst (sonst wird er rausgeworfen)
+            // 2. Nicht joinen, wenn du selbst gerade spielst (sonst wirst du rausgeworfen)
             if (selbstOnline) {
                 lauf.addProperty("status", "selbst_online");
                 lauf.addProperty("grund", "Du bist gerade selbst online, der Bot hat nicht gejoint.");
+                speichere(lauf);
+                return;
+            }
+            // Versteckte Namen: lieber nicht joinen, du koenntest dabei sein
+            if (unbekannt || st.online() > st.spieler().size() && st.spieler().isEmpty()) {
+                lauf.addProperty("status", "selbst_online");
+                lauf.addProperty("grund", "Der Server zeigt nicht, wer online ist. Sicherheitshalber nicht gejoint.");
                 speichere(lauf);
                 return;
             }
@@ -275,24 +277,111 @@ public class Main {
         speichere(lauf);
     }
 
-    static ServerStatusInfo status(String host, int port) throws Exception {
-        CompletableFuture<ServerStatusInfo> ergebnis = new CompletableFuture<>();
-        ClientSession c = ClientNetworkSessionFactory.factory()
-            .setRemoteSocketAddress(new InetSocketAddress(host, port))
-            .setProtocol(new MinecraftProtocol())
-            .create();
-        c.setFlag(MinecraftConstants.SERVER_INFO_HANDLER_KEY, (s, info) -> ergebnis.complete(info));
-        c.addListener(new SessionAdapter() {
-            @Override
-            public void disconnected(DisconnectedEvent event) {
-                ergebnis.completeExceptionally(new IllegalStateException("Status-Abfrage getrennt: " + text(event.getReason())));
+    /** Antwort der Server-Liste (wie im Multiplayer-Menue). */
+    record Status(int protokoll, String version, String motd, int online, int max, List<String> spieler) {}
+
+    /** Zwei Versuche, weil Aternos die erste Verbindung manchmal sofort schliesst. null = nicht erreichbar. */
+    static Status statusMitWiederholung(String host, int port) {
+        for (int versuch = 0; versuch < 3; versuch++) {
+            try {
+                return rohStatus(host, port);
+            } catch (Exception e) {
+                System.out.println("Status-Versuch " + (versuch + 1) + ": " + e.getClass().getSimpleName());
+                try {
+                    Thread.sleep(2500);
+                } catch (InterruptedException ie) {
+                    return null;
+                }
             }
-        });
-        c.connect();
-        try {
-            return ergebnis.get(15, TimeUnit.SECONDS);
-        } finally {
-            c.disconnect(Component.text("fertig"));
+        }
+        return null;
+    }
+
+    /** Handshake + Status-Anfrage von Hand: liest nur das JSON und ist damit robust gegen Sonderantworten. */
+    static Status rohStatus(String host, int port) throws Exception {
+        try (java.net.Socket s = new java.net.Socket()) {
+            s.connect(new InetSocketAddress(host, port), 8000);
+            s.setSoTimeout(8000);
+            java.io.ByteArrayOutputStream hs = new java.io.ByteArrayOutputStream();
+            schreibeVarInt(hs, 0);
+            schreibeVarInt(hs, new MinecraftProtocol().getCodec().getProtocolVersion());
+            byte[] h = host.getBytes(StandardCharsets.UTF_8);
+            schreibeVarInt(hs, h.length);
+            hs.write(h);
+            hs.write(port >> 8);
+            hs.write(port & 0xFF);
+            schreibeVarInt(hs, 1);
+            java.io.ByteArrayOutputStream raus = new java.io.ByteArrayOutputStream();
+            schreibeVarInt(raus, hs.size());
+            hs.writeTo(raus);
+            schreibeVarInt(raus, 1);
+            schreibeVarInt(raus, 0);
+            s.getOutputStream().write(raus.toByteArray());
+            s.getOutputStream().flush();
+            java.io.DataInputStream in = new java.io.DataInputStream(new java.io.BufferedInputStream(s.getInputStream()));
+            liesVarInt(in);
+            if (liesVarInt(in) != 0) throw new IllegalStateException("Unerwartetes Paket");
+            int laenge = liesVarInt(in);
+            if (laenge <= 0 || laenge > 2_000_000) throw new IllegalStateException("Antwort zu gross");
+            JsonObject o = JsonParser.parseString(new String(in.readNBytes(laenge), StandardCharsets.UTF_8)).getAsJsonObject();
+            JsonObject v = o.has("version") ? o.getAsJsonObject("version") : new JsonObject();
+            JsonObject p = o.has("players") && o.get("players").isJsonObject() ? o.getAsJsonObject("players") : new JsonObject();
+            List<String> namen = new ArrayList<>();
+            if (p.has("sample") && p.get("sample").isJsonArray()) {
+                for (var e : p.getAsJsonArray("sample")) {
+                    if (e.isJsonObject() && e.getAsJsonObject().has("name")) namen.add(e.getAsJsonObject().get("name").getAsString());
+                }
+            }
+            return new Status(
+                v.has("protocol") ? v.get("protocol").getAsInt() : -1,
+                v.has("name") ? v.get("name").getAsString().replaceAll("§.", "").strip() : "",
+                o.has("description") ? jsonText(o.get("description")).replaceAll("§.", "").strip() : "",
+                p.has("online") ? p.get("online").getAsInt() : 0,
+                p.has("max") ? p.get("max").getAsInt() : 0,
+                namen);
+        }
+    }
+
+    /** null = Server laeuft; sonst ein kurzer Grund, warum gerade nicht. */
+    static String zustand(Status st) {
+        String m = (st.motd() + " " + st.version()).toLowerCase();
+        if (st.protokoll() < 0 || m.contains("offline")) return "Der Server ist gerade aus.";
+        if (m.matches("(?s).*(starting|startet|loading|preparing|queue|warteschlange|wird gestartet).*")) return "Der Server startet gerade.";
+        if (m.matches("(?s).*(stopping|stoppt|saving|wird gestoppt|restarting).*")) return "Der Server faehrt gerade herunter.";
+        return null;
+    }
+
+    /** Text aus einer Chat-Komponente in JSON-Form (Zeichenkette, Objekt mit text/extra oder Liste). */
+    static String jsonText(com.google.gson.JsonElement e) {
+        if (e == null || e.isJsonNull()) return "";
+        if (e.isJsonPrimitive()) return e.getAsString();
+        StringBuilder b = new StringBuilder();
+        if (e.isJsonArray()) {
+            for (var x : e.getAsJsonArray()) b.append(jsonText(x));
+            return b.toString();
+        }
+        JsonObject o = e.getAsJsonObject();
+        if (o.has("text")) b.append(o.get("text").getAsString());
+        if (o.has("extra")) b.append(jsonText(o.get("extra")));
+        return b.toString();
+    }
+
+    static void schreibeVarInt(java.io.OutputStream o, int wert) throws java.io.IOException {
+        while ((wert & ~0x7F) != 0) {
+            o.write((wert & 0x7F) | 0x80);
+            wert >>>= 7;
+        }
+        o.write(wert);
+    }
+
+    static int liesVarInt(java.io.DataInputStream in) throws java.io.IOException {
+        int wert = 0, stelle = 0;
+        while (true) {
+            int b = in.readUnsignedByte();
+            wert |= (b & 0x7F) << stelle;
+            if ((b & 0x80) == 0) return wert;
+            stelle += 7;
+            if (stelle > 35) throw new java.io.IOException("VarInt zu lang");
         }
     }
 
