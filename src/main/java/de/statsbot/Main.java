@@ -443,7 +443,23 @@ public class Main {
             List<Befehle.Befehl> neu = Befehle.abholen(schluessel("KS_DATEN_SCHLUESSEL"), str(DATEN, "befehleSeit"));
             for (Befehle.Befehl b : neu) {
                 DATEN.addProperty("befehleSeit", b.id());
-                if (AUFTRAEGE.stream().noneMatch(a -> a.id.equals(b.id()))) AUFTRAEGE.add(new Sitzung.Auftrag(b.id(), b.art(), b.anzahl()));
+                if (AUFTRAEGE.stream().anyMatch(a -> a.id.equals(b.id()))) continue;
+                if ("abbrechen".equals(b.art())) {
+                    // Alle bis dahin offenen Auftraege stoppen; wirkt sofort, auch wenn der Server aus ist
+                    int n = 0;
+                    for (Sitzung.Auftrag a : AUFTRAEGE) {
+                        if (!a.status.equals("offen")) continue;
+                        a.status = "abgebrochen";
+                        a.ergebnis = "In der App abgebrochen";
+                        n++;
+                    }
+                    Sitzung.Auftrag quittung = new Sitzung.Auftrag(b.id(), b.art(), 0);
+                    quittung.status = "erledigt";
+                    quittung.ergebnis = n == 1 ? "1 Auftrag abgebrochen" : n + " Auftraege abgebrochen";
+                    AUFTRAEGE.add(quittung);
+                    continue;
+                }
+                AUFTRAEGE.add(new Sitzung.Auftrag(b.id(), b.art(), b.anzahl()));
             }
             if (!neu.isEmpty()) System.out.println("Neue Befehle: " + neu.size());
         } catch (Exception e) {
