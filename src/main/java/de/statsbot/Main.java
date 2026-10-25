@@ -25,7 +25,21 @@ import org.geysermc.mcprotocollib.protocol.MinecraftConstants;
 import org.geysermc.mcprotocollib.protocol.MinecraftProtocol;
 import org.geysermc.mcprotocollib.protocol.data.game.PlayerListEntry;
 import org.geysermc.mcprotocollib.protocol.data.status.ServerStatusInfo;
+import org.geysermc.mcprotocollib.protocol.data.game.ClientCommand;
+import org.geysermc.mcprotocollib.protocol.data.game.statistic.BreakBlockStatistic;
+import org.geysermc.mcprotocollib.protocol.data.game.statistic.BreakItemStatistic;
+import org.geysermc.mcprotocollib.protocol.data.game.statistic.CraftItemStatistic;
+import org.geysermc.mcprotocollib.protocol.data.game.statistic.CustomStatistic;
+import org.geysermc.mcprotocollib.protocol.data.game.statistic.DropItemStatistic;
+import org.geysermc.mcprotocollib.protocol.data.game.statistic.KillEntityStatistic;
+import org.geysermc.mcprotocollib.protocol.data.game.statistic.KilledByEntityStatistic;
+import org.geysermc.mcprotocollib.protocol.data.game.statistic.PickupItemStatistic;
+import org.geysermc.mcprotocollib.protocol.data.game.statistic.Statistic;
+import org.geysermc.mcprotocollib.protocol.data.game.statistic.UseItemStatistic;
+import org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound.ClientboundAwardStatsPacket;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound.ClientboundLoginPacket;
+import org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound.entity.player.ClientboundSetExperiencePacket;
+import org.geysermc.mcprotocollib.protocol.packet.ingame.serverbound.ServerboundClientCommandPacket;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound.ClientboundPlayerInfoUpdatePacket;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound.ClientboundSystemChatPacket;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound.entity.ClientboundAddEntityPacket;
@@ -114,6 +128,14 @@ public class Main {
                         + " | online " + i.getPlayerInfo().getOnlinePlayers() + " " + i.getPlayerInfo().getPlayers().stream().map(GameProfile::getName).toList());
                     System.out.println("Bot spricht Protokoll " + new MinecraftProtocol().getCodec().getProtocolVersion() + " (" + new MinecraftProtocol().getCodec().getMinecraftVersion() + ")");
                 }
+            }
+            case "historie" -> {
+                // Einmalig: Geld-Geschichte aus den PC-Logs (Export des PC-Mods) in die verschluesselten Daten legen
+                byte[] k = schluessel("KS_DATEN_SCHLUESSEL");
+                JsonObject daten = JsonParser.parseString(new String(entschluessele(Files.readAllBytes(DATEN_DATEI), k), StandardCharsets.UTF_8)).getAsJsonObject();
+                daten.add("historie", JsonParser.parseString(Files.readString(Path.of(args[1]), StandardCharsets.UTF_8)));
+                Files.write(DATEN_DATEI, verschluessele(GSON.toJson(daten).getBytes(StandardCharsets.UTF_8), k));
+                System.out.println("Historie eingefuegt");
             }
             case "schluessel" -> {
                 System.out.println("KS_AUTH_SCHLUESSEL=" + neuerSchluessel());
@@ -243,6 +265,8 @@ public class Main {
         List<Object[]> wesen = new ArrayList<>(); // {Typ, x, y, z} - kann vor der eigenen Position ankommen
         boolean[] eilig = {false};
         float[] leben = {-1};
+        int[] essen = {-1}, level = {-1};
+        JsonObject[] statistiken = {null};
         long start = System.currentTimeMillis();
 
         ClientSession c = ClientNetworkSessionFactory.factory()
@@ -284,6 +308,7 @@ public class Main {
                 try {
                     if (p instanceof ClientboundLoginPacket) {
                         // Befehle kurz nach dem Join, dann nach 4,5 s gehen
+                        uhr.schedule(() -> { if (!eilig[0]) c.send(new ServerboundClientCommandPacket(ClientCommand.REQUEST_STATS)); }, 300, TimeUnit.MILLISECONDS);
                         uhr.schedule(() -> { if (!eilig[0]) c.send(new ServerboundChatCommandPacket("bal")); }, 700, TimeUnit.MILLISECONDS);
                         uhr.schedule(() -> { if (!eilig[0]) c.send(new ServerboundChatCommandPacket("topgeld")); }, 1700, TimeUnit.MILLISECONDS);
                         uhr.schedule(raus, 4500, TimeUnit.MILLISECONDS);
@@ -296,6 +321,11 @@ public class Main {
                         if (leben[0] >= 0 && h.getHealth() < leben[0]) notaus.accept("Schaden bekommen (" + leben[0] + " -> " + h.getHealth() + ")");
                         else if (h.getHealth() <= 8) notaus.accept("Wenig Leben (" + h.getHealth() + ")");
                         leben[0] = h.getHealth();
+                        essen[0] = h.getFood();
+                    } else if (p instanceof ClientboundSetExperiencePacket xp) {
+                        level[0] = xp.getLevel();
+                    } else if (p instanceof ClientboundAwardStatsPacket a) {
+                        statistiken[0] = statistikJson(a);
                     } else if (p instanceof ClientboundPlayerCombatKillPacket) {
                         notaus.accept("Tod");
                     } else if (p instanceof ClientboundAddEntityPacket e) {
@@ -330,6 +360,14 @@ public class Main {
         lauf.addProperty("dauerMs", System.currentTimeMillis() - start);
         if (abbruch[0] != null) lauf.addProperty("notaus", abbruch[0]);
         if (leben[0] >= 0) lauf.addProperty("leben", leben[0]);
+        if (essen[0] >= 0) lauf.addProperty("essen", essen[0]);
+        if (level[0] >= 0) lauf.addProperty("level", level[0]);
+        if (statistiken[0] != null) lauf.add("statistiken", statistiken[0]);
+        if (position[0] != null) {
+            JsonArray pos = new JsonArray();
+            for (double d : position[0]) pos.add(Math.round(d));
+            lauf.add("position", pos);
+        }
 
         JsonArray roh = new JsonArray();
         Map<Integer, JsonObject> top = new TreeMap<>();
@@ -359,6 +397,36 @@ public class Main {
         if (!lauf.has("kontostand") && lauf.has("getrennt")) lauf.addProperty("grund", "Server hat getrennt: " + lauf.get("getrennt").getAsString());
     }
 
+    /** Minecraft-Statistiken: allgemeine Werte einzeln, Bloecke/Items als Summen, Kills nach Wesen. */
+    static JsonObject statistikJson(ClientboundAwardStatsPacket a) {
+        JsonObject allgemein = new JsonObject(), summen = new JsonObject(), kills = new JsonObject(), getoetetVon = new JsonObject();
+        for (var e : a.getStatistics().object2IntEntrySet()) {
+            Statistic s = e.getKey();
+            int v = e.getIntValue();
+            if (s instanceof CustomStatistic cs) allgemein.addProperty(cs.name().toLowerCase(), v);
+            else if (s instanceof KillEntityStatistic k) kills.addProperty(k.getEntity().name().toLowerCase(), v);
+            else if (s instanceof KilledByEntityStatistic k) getoetetVon.addProperty(k.getEntity().name().toLowerCase(), v);
+            else {
+                String art = switch (s) {
+                    case BreakBlockStatistic b -> "abgebaut";
+                    case CraftItemStatistic b -> "hergestellt";
+                    case UseItemStatistic b -> "benutzt";
+                    case BreakItemStatistic b -> "kaputt";
+                    case PickupItemStatistic b -> "aufgehoben";
+                    case DropItemStatistic b -> "fallengelassen";
+                    default -> "sonstiges";
+                };
+                summen.addProperty(art, (summen.has(art) ? summen.get(art).getAsLong() : 0) + v);
+            }
+        }
+        JsonObject o = new JsonObject();
+        o.add("allgemein", allgemein);
+        o.add("summen", summen);
+        o.add("kills", kills);
+        o.add("getoetetVon", getoetetVon);
+        return o;
+    }
+
     // ---------------------------------------------------------------- Speichern (verschluesselt)
 
     static void speichere(JsonObject lauf) throws Exception {
@@ -386,6 +454,34 @@ public class Main {
             while (verlauf.size() > 3000) verlauf.remove(0);
         }
         daten.add("verlauf", verlauf);
+        if (lauf.has("statistiken")) {
+            daten.add("statistiken", lauf.get("statistiken"));
+            daten.add("statistikZeit", lauf.get("zeit"));
+        }
+        // Top 10 ueber die Zeit (fuer die Kurven der anderen)
+        if (lauf.has("topgeld") && !lauf.getAsJsonArray("topgeld").isEmpty()) {
+            JsonArray tv = daten.has("topVerlauf") ? daten.getAsJsonArray("topVerlauf") : new JsonArray();
+            JsonObject p = new JsonObject();
+            p.add("zeit", lauf.get("zeit"));
+            JsonObject werte = new JsonObject();
+            for (var r : lauf.getAsJsonArray("topgeld")) {
+                JsonObject ro = r.getAsJsonObject();
+                werte.add(ro.get("name").getAsString(), ro.get("geld"));
+            }
+            p.add("werte", werte);
+            tv.add(p);
+            while (tv.size() > 2000) tv.remove(0);
+            daten.add("topVerlauf", tv);
+        }
+        // Wer war wann online, und lief der Server?
+        JsonArray ov = daten.has("onlineVerlauf") ? daten.getAsJsonArray("onlineVerlauf") : new JsonArray();
+        JsonObject op = new JsonObject();
+        op.add("zeit", lauf.get("zeit"));
+        op.addProperty("serverAn", !"server_aus".equals(str(lauf, "status")) && !"fehler".equals(str(lauf, "status")));
+        op.add("spieler", lauf.has("online") ? lauf.get("online") : new JsonArray());
+        ov.add(op);
+        while (ov.size() > 3000) ov.remove(0);
+        daten.add("onlineVerlauf", ov);
         JsonArray laeufe = daten.has("laeufe") ? daten.getAsJsonArray("laeufe") : new JsonArray();
         JsonObject kurz = new JsonObject();
         kurz.add("zeit", lauf.get("zeit"));
