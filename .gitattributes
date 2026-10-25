@@ -1,0 +1,3 @@
+*.enc binary
+*.jar binary
+gradlew text eol=lf

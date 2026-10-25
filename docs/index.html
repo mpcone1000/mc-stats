@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>MC-Stats</title>
+<style>
+:root { --bg:#f4f5f7; --panel:#fff; --text:#1d2330; --muted:#677085; --line:#e3e6ec; --accent:#2f6fde; --plus:#188a4a; --minus:#c23a3a; --warn:#b26b00; }
+@media (prefers-color-scheme: dark) { :root { --bg:#12151b; --panel:#1b2029; --text:#e7eaf0; --muted:#98a1b3; --line:#2a313d; --accent:#6c9cff; --plus:#4cc27f; --minus:#ff7676; --warn:#ffb547; } }
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--text); font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+main { max-width: 640px; margin: 0 auto; padding: 16px; }
+h1 { font-size: 20px; margin: 4px 0 2px; }
+.sub { color: var(--muted); font-size: 13px; margin-bottom: 14px; }
+.karte { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-bottom:12px; }
+.gross { font-size: 34px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+.t { font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; }
+.klein { font-size:13px; color:var(--muted); }
+.plus { color:var(--plus); } .minus { color:var(--minus); } .warn { color:var(--warn); }
+table { width:100%; border-collapse:collapse; font-size:15px; }
+td { padding:6px 4px; border-bottom:1px solid var(--line); }
+td.z { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.chip { display:inline-block; background:var(--bg); border:1px solid var(--line); border-radius:999px; padding:2px 10px; margin:3px 4px 0 0; font-size:14px; }
+svg text { fill: var(--muted); font-size: 11px; }
+input { font:inherit; width:100%; padding:10px; border-radius:8px; border:1px solid var(--line); background:var(--bg); color:var(--text); }
+button { font:inherit; padding:9px 14px; border-radius:8px; border:0; background:var(--accent); color:#fff; margin-top:8px; }
+details summary { cursor:pointer; color:var(--muted); font-size:14px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>MC-Stats</h1>
+  <div class="sub" id="sub">lade …</div>
+  <div id="inhalt"></div>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c]));
+const zahl = (n, d = 0) => Number(n || 0).toLocaleString("de-DE", { maximumFractionDigits: d });
+const geld = n => (n < 0 ? "−" : "") + "$" + zahl(Math.abs(n), 2);
+const zeit = s => s ? new Date(s).toLocaleString("de-DE", { weekday:"short", day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit" }) : "–";
+function vor(s) {
+  if (!s) return "";
+  const m = Math.round((Date.now() - new Date(s)) / 60000);
+  return m < 1 ? "gerade eben" : m < 60 ? `vor ${m} Min.` : m < 1440 ? `vor ${Math.round(m / 60)} Std.` : `vor ${Math.round(m / 1440)} Tagen`;
+}
+const STATUS = {
+  ok: ["Daten geholt", "plus"], server_aus: ["Server ist aus", "warn"], selbst_online: ["Du warst selbst online", "warn"],
+  notaus: ["Notaus, sofort raus", "minus"], keine_daten: ["Keine Antwort auf /bal", "warn"], fehler: ["Fehler", "minus"]
+};
+
+function schluesselHolen() {
+  let k = location.hash.slice(1);
+  try { if (k) localStorage.setItem("ks-key", k); else k = localStorage.getItem("ks-key") || ""; } catch (e) {}
+  return k;
+}
+function b64url(s) { s = s.replace(/-/g, "+").replace(/_/g, "/"); while (s.length % 4) s += "="; return Uint8Array.from(atob(s), c => c.charCodeAt(0)); }
+
+async function laden() {
+  const k = schluesselHolen();
+  if (!k) { $("#sub").textContent = "Schlüssel fehlt"; $("#inhalt").innerHTML = `<div class="karte">Öffne die Seite über deinen persönlichen Link (mit # am Ende).</div>`; return; }
+  try {
+    const r = await fetch("daten.enc?t=" + Date.now(), { cache: "no-store" });
+    if (!r.ok) throw new Error("Noch keine Daten (" + r.status + ")");
+    const roh = new Uint8Array(await r.arrayBuffer());
+    const key = await crypto.subtle.importKey("raw", b64url(k), "AES-GCM", false, ["decrypt"]);
+    const klar = await crypto.subtle.decrypt({ name: "AES-GCM", iv: roh.slice(0, 12) }, key, roh.slice(12));
+    zeige(JSON.parse(new TextDecoder().decode(klar)));
+  } catch (e) {
+    $("#sub").textContent = "Konnte nicht laden";
+    $("#inhalt").innerHTML = `<div class="karte minus">${esc(e.message || "Falscher Schlüssel")}</div>`;
+  }
+}
+
+function zeige(d) {
+  const l = d.letzterLauf || {}, ok = d.letzterErfolg || {};
+  const [st, cls] = STATUS[l.status] || [l.status || "?", ""];
+  $("#sub").innerHTML = `Letzter Check ${vor(l.zeit)} · <span class="${cls}">${st}</span>`;
+  const v = d.verlauf || [];
+  let h = `<div class="karte"><div class="t">Kontostand</div>
+    <div class="gross">${ok.kontostand != null ? geld(ok.kontostand) : "?"}</div>
+    <div class="klein">${ok.zeit ? "Stand " + zeit(ok.zeit) + " (" + vor(ok.zeit) + ")" : "noch kein erfolgreicher Check"}</div>
+    ${aenderung(v)}</div>`;
+  if (l.status !== "ok") h += `<div class="karte"><div class="t">Letzter Versuch</div><div class="${cls}">${st}</div>
+    <div class="klein">${esc(l.grund || l.notaus || "")}</div></div>`;
+  h += `<div class="karte"><div class="t">Verlauf</div>${kurve(v)}</div>`;
+  const top = d.topgeld || [];
+  h += `<div class="karte"><div class="t">Top Geld ${d.topgeldZeit ? "· " + vor(d.topgeldZeit) : ""}</div>${top.length
+    ? `<table>${top.map(r => `<tr><td>${r.platz}.</td><td>${esc(r.name)}</td><td class="z">${geld(r.geld)}</td></tr>`).join("")}</table>`
+    : `<div class="klein">Noch nicht erkannt.</div>${(ok.nachrichten || []).length ? `<details><summary>Antworten vom Server</summary><div class="klein">${ok.nachrichten.map(esc).join("<br>")}</div></details>` : ""}`}</div>`;
+  const on = l.online || ok.online || [];
+  h += `<div class="karte"><div class="t">Online beim letzten Check (${l.onlineAnzahl ?? on.length})</div>${on.length ? on.map(n => `<span class="chip">${esc(n)}</span>`).join("") : `<div class="klein">niemand</div>`}</div>`;
+  const laeufe = (d.laeufe || []).slice(-12).reverse();
+  h += `<div class="karte"><details><summary>Letzte Checks</summary><table>${laeufe.map(x => {
+    const [s, c] = STATUS[x.status] || [x.status, ""];
+    return `<tr><td>${zeit(x.zeit)}</td><td class="${c}">${s}${x.notaus ? "<br><span class='klein'>" + esc(x.notaus) + "</span>" : ""}</td></tr>`;
+  }).join("")}</table></details></div>`;
+  $("#inhalt").innerHTML = h;
+}
+
+function aenderung(v) {
+  if (v.length < 2) return "";
+  const jetzt = v[v.length - 1], grenze = new Date(jetzt.zeit) - 24 * 3600e3;
+  const alt = [...v].reverse().find(p => new Date(p.zeit) <= grenze) || v[0];
+  const diff = jetzt.kontostand - alt.kontostand;
+  return `<div class="klein ${diff >= 0 ? "plus" : "minus"}">${diff >= 0 ? "+" : ""}${geld(diff)} seit ${zeit(alt.zeit)}</div>`;
+}
+
+function kurve(v) {
+  const p = v.slice(-200);
+  if (p.length < 2) return `<div class="klein">Kommt, sobald es mehrere Checks gibt.</div>`;
+  const B = 600, H = 180, t0 = new Date(p[0].zeit), t1 = new Date(p[p.length - 1].zeit);
+  const min = Math.min(...p.map(x => x.kontostand)), max = Math.max(...p.map(x => x.kontostand)), sp = (max - min) || 1;
+  const X = z => 6 + (new Date(z) - t0) / ((t1 - t0) || 1) * (B - 12), Y = w => H - 22 - (w - min) / sp * (H - 40);
+  const pfad = p.map((x, i) => (i ? "L" : "M") + X(x.zeit).toFixed(1) + " " + Y(x.kontostand).toFixed(1)).join(" ");
+  return `<svg viewBox="0 0 ${B} ${H}" width="100%" role="img" aria-label="Kontostand-Verlauf">
+    <path d="${pfad}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round"/>
+    <text x="6" y="12">${geld(max)}</text><text x="6" y="${H - 26}">${geld(min)}</text>
+    <text x="6" y="${H - 4}">${zeit(p[0].zeit)}</text><text x="${B - 6}" y="${H - 4}" text-anchor="end">${zeit(p[p.length - 1].zeit)}</text></svg>`;
+}
+
+laden();
+setInterval(laden, 60000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) laden(); });
+</script>
+</body>
+</html>

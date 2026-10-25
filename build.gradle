@@ -1,0 +1,14 @@
+plugins { id 'application' }
+repositories {
+  mavenCentral()
+  maven { url = 'https://repo.opencollab.dev/maven-releases/' }
+  maven { url = 'https://repo.opencollab.dev/maven-snapshots/' }
+}
+dependencies {
+  implementation 'org.geysermc.mcprotocollib:protocol:26.3'
+  implementation 'org.slf4j:slf4j-simple:2.0.9'
+}
+java { toolchain { languageVersion = JavaLanguageVersion.of(25) } }
+tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8' }
+application { mainClass = 'de.statsbot.Main' }
+tasks.register('libs', Copy) { from configurations.runtimeClasspath; into 'build/libs-alle' }
