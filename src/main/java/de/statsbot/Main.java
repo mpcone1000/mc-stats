@@ -129,6 +129,19 @@ public class Main {
                     System.out.println("Bot spricht Protokoll " + new MinecraftProtocol().getCodec().getProtocolVersion() + " (" + new MinecraftProtocol().getCodec().getMinecraftVersion() + ")");
                 }
             }
+            case "sende" -> {
+                // Testweise einen Befehl so einstellen, wie es die App tut: sende <befehl> [anzahl]
+                byte[] k = schluessel("KS_DATEN_SCHLUESSEL");
+                JsonObject b = new JsonObject();
+                b.addProperty("befehl", args[1]);
+                b.addProperty("anzahl", args.length > 2 ? Integer.parseInt(args[2]) : 1);
+                b.addProperty("zeit", ZonedDateTime.now(ZONE).format(ISO));
+                String text = Base64.getUrlEncoder().withoutPadding().encodeToString(verschluessele(b.toString().getBytes(StandardCharsets.UTF_8), k));
+                var r = java.net.http.HttpClient.newHttpClient().send(java.net.http.HttpRequest.newBuilder(
+                        java.net.URI.create("https://ntfy.sh/" + Befehle.kanal(k))).POST(java.net.http.HttpRequest.BodyPublishers.ofString(text)).build(),
+                    java.net.http.HttpResponse.BodyHandlers.ofString());
+                System.out.println("Gesendet: " + r.statusCode());
+            }
             case "historie" -> {
                 // Einmalig: Geld-Geschichte aus den PC-Logs (Export des PC-Mods) in die verschluesselten Daten legen
                 byte[] k = schluessel("KS_DATEN_SCHLUESSEL");
@@ -186,6 +199,8 @@ public class Main {
         lauf.addProperty("zeit", ZonedDateTime.now(ZONE).format(ISO));
         try {
             if (HOST.isEmpty()) throw new IllegalStateException("KS_SERVER fehlt");
+            ladeDaten();
+            holeBefehle();
             JavaAuthManager auth = ladeAuth();
             MinecraftProfile profil = auth.getMinecraftProfile().getUpToDate();
             String token = auth.getMinecraftToken().getUpToDate().getToken();
@@ -225,8 +240,21 @@ public class Main {
                 return;
             }
 
-            // 3. Kurz joinen
-            besuche(port, profil, token, lauf);
+            // 3. Kurz joinen. Bei Schaden: sofort raus, kurz warten, wieder rein (hoechstens zweimal, nicht bei wenig Leben)
+            for (int versuch = 0; ; versuch++) {
+                Sitzung s = new Sitzung(HOST, port, profil, token, AUFTRAEGE, lauf);
+                Sitzung.Ende ende = s.laufe();
+                if (s.grund() != null) lauf.addProperty(ende == Sitzung.Ende.SCHADEN ? "notaus" : "grund", s.grund());
+                boolean nochWasZuTun = !lauf.has("kontostand") || AUFTRAEGE.stream().anyMatch(a -> a.status.equals("offen"));
+                if (ende == Sitzung.Ende.SCHADEN && versuch < 2 && s.leben() > 6 && nochWasZuTun) {
+                    lauf.addProperty("wiederkehr", versuch + 1);
+                    System.out.println("Kurz raus wegen Schaden, gleich wieder rein");
+                    Thread.sleep(25_000);
+                    continue;
+                }
+                break;
+            }
+            lauf.addProperty("status", lauf.has("kontostand") ? "ok" : lauf.has("notaus") ? "notaus" : "keine_daten");
         } catch (Exception e) {
             lauf.addProperty("status", "fehler");
             lauf.addProperty("grund", e.getClass().getSimpleName() + ": " + e.getMessage());
@@ -253,148 +281,6 @@ public class Main {
         } finally {
             c.disconnect(Component.text("fertig"));
         }
-    }
-
-    static void besuche(int port, MinecraftProfile profil, String token, JsonObject lauf) throws Exception {
-        List<String> zeilen = new ArrayList<>();
-        Set<String> spieler = new LinkedHashSet<>();
-        CountDownLatch fertig = new CountDownLatch(1);
-        ScheduledExecutorService uhr = Executors.newSingleThreadScheduledExecutor();
-        String[] abbruch = {null};
-        double[][] position = {null};
-        List<Object[]> wesen = new ArrayList<>(); // {Typ, x, y, z} - kann vor der eigenen Position ankommen
-        boolean[] eilig = {false};
-        float[] leben = {-1};
-        int[] essen = {-1}, level = {-1};
-        JsonObject[] statistiken = {null};
-        long start = System.currentTimeMillis();
-
-        ClientSession c = ClientNetworkSessionFactory.factory()
-            .setRemoteSocketAddress(new InetSocketAddress(HOST, port))
-            .setProtocol(new MinecraftProtocol(new GameProfile(profil.getId(), profil.getName()), token))
-            .create();
-        c.setFlag(MinecraftConstants.SESSION_SERVICE_KEY, new SessionService());
-
-        Runnable raus = () -> {
-            if (c.isConnected()) c.disconnect(Component.text("Bis gleich"));
-            fertig.countDown();
-        };
-        java.util.function.Consumer<String> notaus = grund -> {
-            if (abbruch[0] == null) abbruch[0] = grund;
-            System.out.println("NOTAUS: " + grund);
-            raus.run();
-        };
-        // Monster/Spieler in der Naehe: nur noch schnell /bal und nach 0,8 s raus (Schaden loest weiterhin sofort aus)
-        Runnable pruefeGefahr = () -> {
-            if (position[0] == null || eilig[0]) return;
-            for (Object[] w : wesen) {
-                double dx = (double) w[1] - position[0][0], dy = (double) w[2] - position[0][1], dz = (double) w[3] - position[0][2];
-                double abstand = Math.sqrt(dx * dx + dy * dy + dz * dz);
-                String typ = (String) w[0];
-                if ((GEFAEHRLICH.contains(typ) && abstand < 12) || ("PLAYER".equals(typ) && abstand < 6)) {
-                    eilig[0] = true;
-                    abbruch[0] = typ + " in " + Math.round(abstand) + " Bloecken, nur kurz /bal";
-                    System.out.println("VORSICHT: " + abbruch[0]);
-                    c.send(new ServerboundChatCommandPacket("bal"));
-                    uhr.schedule(raus, 800, TimeUnit.MILLISECONDS);
-                    return;
-                }
-            }
-        };
-
-        c.addListener(new SessionAdapter() {
-            @Override
-            public void packetReceived(Session s, Packet p) {
-                try {
-                    if (p instanceof ClientboundLoginPacket) {
-                        // Befehle kurz nach dem Join, dann nach 4,5 s gehen
-                        uhr.schedule(() -> { if (!eilig[0]) c.send(new ServerboundClientCommandPacket(ClientCommand.REQUEST_STATS)); }, 300, TimeUnit.MILLISECONDS);
-                        uhr.schedule(() -> { if (!eilig[0]) c.send(new ServerboundChatCommandPacket("bal")); }, 700, TimeUnit.MILLISECONDS);
-                        uhr.schedule(() -> { if (!eilig[0]) c.send(new ServerboundChatCommandPacket("topgeld")); }, 1700, TimeUnit.MILLISECONDS);
-                        uhr.schedule(raus, 4500, TimeUnit.MILLISECONDS);
-                    } else if (p instanceof ClientboundPlayerPositionPacket pp) {
-                        if (position[0] == null) {
-                            position[0] = new double[]{pp.getPosition().getX(), pp.getPosition().getY(), pp.getPosition().getZ()};
-                            pruefeGefahr.run();
-                        }
-                    } else if (p instanceof ClientboundSetHealthPacket h) {
-                        if (leben[0] >= 0 && h.getHealth() < leben[0]) notaus.accept("Schaden bekommen (" + leben[0] + " -> " + h.getHealth() + ")");
-                        else if (h.getHealth() <= 8) notaus.accept("Wenig Leben (" + h.getHealth() + ")");
-                        leben[0] = h.getHealth();
-                        essen[0] = h.getFood();
-                    } else if (p instanceof ClientboundSetExperiencePacket xp) {
-                        level[0] = xp.getLevel();
-                    } else if (p instanceof ClientboundAwardStatsPacket a) {
-                        statistiken[0] = statistikJson(a);
-                    } else if (p instanceof ClientboundPlayerCombatKillPacket) {
-                        notaus.accept("Tod");
-                    } else if (p instanceof ClientboundAddEntityPacket e) {
-                        wesen.add(new Object[]{e.getType().name(), e.getX(), e.getY(), e.getZ()});
-                        pruefeGefahr.run();
-                    } else if (p instanceof ClientboundSystemChatPacket chat && !chat.isOverlay()) {
-                        for (String z : text(chat.getContent()).split("\n")) if (!z.isBlank()) zeilen.add(z.strip());
-                    } else if (p instanceof ClientboundPlayerInfoUpdatePacket info) {
-                        for (PlayerListEntry e : info.getEntries()) {
-                            if (e.getProfile() != null && e.getProfile().getName() != null) spieler.add(e.getProfile().getName());
-                        }
-                    }
-                } catch (Exception ex) {
-                    notaus.accept("Interner Fehler: " + ex);
-                }
-            }
-
-            @Override
-            public void disconnected(DisconnectedEvent event) {
-                String grund = text(event.getReason());
-                if (!grund.equals("Bis gleich")) lauf.addProperty("getrennt", grund);
-                fertig.countDown();
-            }
-        });
-
-        uhr.schedule(() -> notaus.accept("10-Sekunden-Grenze"), MAX_DAUER_MS, TimeUnit.MILLISECONDS);
-        c.connect();
-        fertig.await(MAX_DAUER_MS + 3000, TimeUnit.MILLISECONDS);
-        if (c.isConnected()) c.disconnect(Component.text("Bis gleich"));
-        uhr.shutdownNow();
-
-        lauf.addProperty("dauerMs", System.currentTimeMillis() - start);
-        if (abbruch[0] != null) lauf.addProperty("notaus", abbruch[0]);
-        if (leben[0] >= 0) lauf.addProperty("leben", leben[0]);
-        if (essen[0] >= 0) lauf.addProperty("essen", essen[0]);
-        if (level[0] >= 0) lauf.addProperty("level", level[0]);
-        if (statistiken[0] != null) lauf.add("statistiken", statistiken[0]);
-        if (position[0] != null) {
-            JsonArray pos = new JsonArray();
-            for (double d : position[0]) pos.add(Math.round(d));
-            lauf.add("position", pos);
-        }
-
-        JsonArray roh = new JsonArray();
-        Map<Integer, JsonObject> top = new TreeMap<>();
-        for (String z : zeilen) {
-            roh.add(z);
-            Matcher m = KONTOSTAND.matcher(z);
-            if (m.find()) lauf.addProperty("kontostand", betrag(m.group(1)));
-            m = RANG.matcher(z);
-            if (m.find()) {
-                JsonObject r = new JsonObject();
-                r.addProperty("platz", Integer.parseInt(m.group(1)));
-                r.addProperty("name", m.group(2));
-                r.addProperty("geld", betrag(m.group(3)));
-                top.put(Integer.parseInt(m.group(1)), r);
-            }
-        }
-        lauf.add("nachrichten", roh);
-        JsonArray topArr = new JsonArray();
-        top.values().forEach(topArr::add);
-        lauf.add("topgeld", topArr);
-        JsonArray sp = new JsonArray();
-        spieler.forEach(sp::add);
-        if (!spieler.isEmpty()) lauf.add("online", sp);
-        // Der Bot selbst zaehlt nicht als online
-        if (lauf.has("online")) lauf.getAsJsonArray("online").remove(new com.google.gson.JsonPrimitive(profil.getName()));
-        lauf.addProperty("status", lauf.has("kontostand") ? "ok" : abbruch[0] != null ? "notaus" : "keine_daten");
-        if (!lauf.has("kontostand") && lauf.has("getrennt")) lauf.addProperty("grund", "Server hat getrennt: " + lauf.get("getrennt").getAsString());
     }
 
     /** Minecraft-Statistiken: allgemeine Werte einzeln, Bloecke/Items als Summen, Kills nach Wesen. */
@@ -429,17 +315,70 @@ public class Main {
 
     // ---------------------------------------------------------------- Speichern (verschluesselt)
 
-    static void speichere(JsonObject lauf) throws Exception {
-        byte[] k = schluessel("KS_DATEN_SCHLUESSEL");
-        JsonObject daten = new JsonObject();
-        if (Files.exists(DATEN_DATEI)) {
-            try {
-                daten = JsonParser.parseString(new String(entschluessele(Files.readAllBytes(DATEN_DATEI), k), StandardCharsets.UTF_8)).getAsJsonObject();
-            } catch (Exception e) {
-                System.out.println("Alte Daten nicht lesbar, fange neu an: " + e);
+    static JsonObject DATEN;
+    static final List<Sitzung.Auftrag> AUFTRAEGE = new ArrayList<>();
+
+    static void ladeDaten() {
+        if (DATEN != null) return;
+        DATEN = new JsonObject();
+        if (!Files.exists(DATEN_DATEI)) return;
+        try {
+            DATEN = JsonParser.parseString(new String(entschluessele(Files.readAllBytes(DATEN_DATEI), schluessel("KS_DATEN_SCHLUESSEL")), StandardCharsets.UTF_8)).getAsJsonObject();
+        } catch (Exception e) {
+            System.out.println("Alte Daten nicht lesbar, fange neu an: " + e);
+        }
+    }
+
+    /** Offene Auftraege aus dem letzten Lauf plus neue Befehle aus der App. */
+    static void holeBefehle() {
+        if (DATEN.has("auftraege")) {
+            for (var e : DATEN.getAsJsonArray("auftraege")) {
+                JsonObject a = e.getAsJsonObject();
+                if ("offen".equals(str(a, "status"))) AUFTRAEGE.add(new Sitzung.Auftrag(str(a, "id"), str(a, "art"), a.has("anzahl") ? a.get("anzahl").getAsInt() : 1));
             }
         }
+        try {
+            List<Befehle.Befehl> neu = Befehle.abholen(schluessel("KS_DATEN_SCHLUESSEL"), str(DATEN, "befehleSeit"));
+            for (Befehle.Befehl b : neu) {
+                DATEN.addProperty("befehleSeit", b.id());
+                if (AUFTRAEGE.stream().noneMatch(a -> a.id.equals(b.id()))) AUFTRAEGE.add(new Sitzung.Auftrag(b.id(), b.art(), b.anzahl()));
+            }
+            if (!neu.isEmpty()) System.out.println("Neue Befehle: " + neu.size());
+        } catch (Exception e) {
+            System.out.println("Befehle nicht abrufbar: " + e.getClass().getSimpleName());
+        }
+    }
+
+    static void speichere(JsonObject lauf) throws Exception {
+        byte[] k = schluessel("KS_DATEN_SCHLUESSEL");
+        ladeDaten();
+        JsonObject daten = DATEN;
+        // Auftraege: aeltere behalten (letzte 30), aktuelle Staende ueberschreiben
+        JsonArray auftr = new JsonArray();
+        if (daten.has("auftraege")) {
+            for (var e : daten.getAsJsonArray("auftraege")) {
+                String id = str(e.getAsJsonObject(), "id");
+                if (AUFTRAEGE.stream().noneMatch(a -> a.id.equals(id))) auftr.add(e);
+            }
+        }
+        for (Sitzung.Auftrag a : AUFTRAEGE) {
+            JsonObject j = new JsonObject();
+            j.addProperty("id", a.id);
+            j.addProperty("art", a.art);
+            j.addProperty("anzahl", a.anzahl);
+            j.addProperty("status", a.status);
+            j.addProperty("ergebnis", a.ergebnis);
+            j.add("zeit", lauf.get("zeit"));
+            auftr.add(j);
+        }
+        while (auftr.size() > 30) auftr.remove(0);
+        daten.add("auftraege", auftr);
         daten.add("letzterLauf", lauf);
+        if (lauf.has("inventar")) {
+            daten.add("inventar", lauf.get("inventar"));
+            daten.add("inventarZeit", lauf.get("zeit"));
+        }
+        if (lauf.has("fenster")) daten.add("shopFenster", lauf.get("fenster"));
         if ("ok".equals(str(lauf, "status"))) daten.add("letzterErfolg", lauf);
         if (lauf.has("topgeld") && !lauf.getAsJsonArray("topgeld").isEmpty()) {
             daten.add("topgeld", lauf.get("topgeld"));
