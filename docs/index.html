@@ -2,127 +2,392 @@
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
+<meta name="theme-color" content="#101418">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
 <title>MC-Stats</title>
 <style>
-:root { --bg:#f4f5f7; --panel:#fff; --text:#1d2330; --muted:#677085; --line:#e3e6ec; --accent:#2f6fde; --plus:#188a4a; --minus:#c23a3a; --warn:#b26b00; }
-@media (prefers-color-scheme: dark) { :root { --bg:#12151b; --panel:#1b2029; --text:#e7eaf0; --muted:#98a1b3; --line:#2a313d; --accent:#6c9cff; --plus:#4cc27f; --minus:#ff7676; --warn:#ffb547; } }
-* { box-sizing: border-box; }
-body { margin:0; background:var(--bg); color:var(--text); font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
-main { max-width: 640px; margin: 0 auto; padding: 16px; }
-h1 { font-size: 20px; margin: 4px 0 2px; }
-.sub { color: var(--muted); font-size: 13px; margin-bottom: 14px; }
-.karte { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-bottom:12px; }
-.gross { font-size: 34px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
-.t { font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; }
-.klein { font-size:13px; color:var(--muted); }
-.plus { color:var(--plus); } .minus { color:var(--minus); } .warn { color:var(--warn); }
-table { width:100%; border-collapse:collapse; font-size:15px; }
-td { padding:6px 4px; border-bottom:1px solid var(--line); }
-td.z { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
-.chip { display:inline-block; background:var(--bg); border:1px solid var(--line); border-radius:999px; padding:2px 10px; margin:3px 4px 0 0; font-size:14px; }
-svg text { fill: var(--muted); font-size: 11px; }
-input { font:inherit; width:100%; padding:10px; border-radius:8px; border:1px solid var(--line); background:var(--bg); color:var(--text); }
-button { font:inherit; padding:9px 14px; border-radius:8px; border:0; background:var(--accent); color:#fff; margin-top:8px; }
-details summary { cursor:pointer; color:var(--muted); font-size:14px; }
+:root {
+  --bg: #f3f4f7; --panel: #ffffff; --panel2: #f7f8fb; --text: #18202b; --muted: #687387; --line: #e2e6ee;
+  --accent: #2e7d4f; --gold: #b7791f; --plus: #1f8a4c; --minus: #c43c3c; --warn: #b26b00; --blue: #2f6fde;
+  --s1: #2e7d4f; --s2: #2f6fde; --s3: #b7791f; --s4: #9b4dca; --s5: #d4572b;
+  --shadow: 0 1px 2px rgba(16, 24, 40, .05), 0 4px 14px rgba(16, 24, 40, .05);
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #0e1116; --panel: #171c24; --panel2: #1d232d; --text: #e8ecf2; --muted: #95a0b4; --line: #262e3a;
+    --accent: #4cc27f; --gold: #f2b544; --plus: #4cc27f; --minus: #ff7676; --warn: #ffb547; --blue: #6c9cff;
+    --s1: #4cc27f; --s2: #6c9cff; --s3: #f2b544; --s4: #c08cff; --s5: #ff8a5c; --shadow: none; }
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; background: var(--bg); color: var(--text);
+  font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+header { position: sticky; top: 0; z-index: 5; background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(10px); padding: calc(10px + env(safe-area-inset-top)) 16px 10px; }
+.kopf { display: flex; align-items: center; gap: 10px; max-width: 760px; margin: 0 auto; }
+.logo { width: 34px; height: 34px; border-radius: 9px; background: linear-gradient(135deg, var(--accent), var(--gold));
+  display: grid; place-items: center; color: #fff; font-weight: 800; font-size: 15px; }
+.kopf h1 { font-size: 18px; margin: 0; line-height: 1.1; }
+.kopf .st { font-size: 12.5px; color: var(--muted); }
+.kopf button { margin-left: auto; }
+main { max-width: 760px; margin: 0 auto; padding: 4px 16px calc(96px + env(safe-area-inset-bottom)); }
+nav { position: fixed; bottom: 0; left: 0; right: 0; z-index: 6; background: var(--panel); border-top: 1px solid var(--line);
+  display: flex; justify-content: center; padding-bottom: env(safe-area-inset-bottom); }
+nav .in { display: flex; width: 100%; max-width: 760px; }
+nav button { flex: 1; background: none; border: 0; color: var(--muted); padding: 8px 2px 9px; font: inherit; font-size: 11px;
+  display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: pointer; }
+nav button svg { width: 22px; height: 22px; }
+nav button.aktiv { color: var(--accent); font-weight: 600; }
+.karte { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 14px 16px; margin-bottom: 12px; box-shadow: var(--shadow); }
+.held { background: linear-gradient(145deg, color-mix(in srgb, var(--accent) 18%, var(--panel)), var(--panel) 60%); }
+.t { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+.gross { font-size: clamp(32px, 9vw, 44px); font-weight: 800; letter-spacing: -.02em; font-variant-numeric: tabular-nums; line-height: 1.1; margin: 4px 0; }
+.mittel { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.klein { font-size: 13px; color: var(--muted); }
+.raster { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 12px; }
+.raster .karte { margin: 0; padding: 12px 14px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.chip { background: var(--panel2); border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; font-size: 13.5px; }
+.chip.gut { color: var(--plus); } .chip.schlecht { color: var(--minus); } .chip.warn { color: var(--warn); }
+.plus { color: var(--plus); } .minus { color: var(--minus); } .warn { color: var(--warn); } .gold { color: var(--gold); }
+table { width: 100%; border-collapse: collapse; font-size: 15px; }
+td, th { padding: 8px 4px; border-bottom: 1px solid var(--line); text-align: left; }
+th { font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; }
+td.z, th.z { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+tr.ich td { background: color-mix(in srgb, var(--accent) 12%, transparent); font-weight: 600; }
+tr:last-child td { border-bottom: 0; }
+.rang { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 8px; background: var(--panel2); font-weight: 700; font-size: 13px; }
+.rang.r1 { background: #f2c94c; color: #3d2e00; } .rang.r2 { background: #cfd6e0; color: #263040; } .rang.r3 { background: #e0a46e; color: #3a1f05; }
+.knoepfe { display: flex; gap: 6px; flex-wrap: wrap; margin: 4px 0 10px; }
+button.k, .knoepfe button { border: 1px solid var(--line); background: var(--panel2); color: var(--text); border-radius: 999px;
+  padding: 6px 12px; font: inherit; font-size: 14px; cursor: pointer; }
+.knoepfe button.aktiv { background: var(--accent); border-color: var(--accent); color: #fff; }
+.balken { height: 8px; border-radius: 99px; background: var(--panel2); overflow: hidden; margin-top: 6px; }
+.balken > i { display: block; height: 100%; background: var(--accent); border-radius: 99px; }
+.zeile { display: flex; justify-content: space-between; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line); }
+.zeile:last-child { border-bottom: 0; }
+.zeile b { font-variant-numeric: tabular-nums; }
+svg.graf { width: 100%; height: auto; display: block; touch-action: pan-y; }
+svg.graf text { fill: var(--muted); font-size: 11px; }
+.tip { font-size: 13px; color: var(--muted); min-height: 19px; margin-top: 4px; }
+.legende { display: flex; flex-wrap: wrap; gap: 10px; font-size: 13px; margin-top: 6px; }
+.legende span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; background: var(--f); }
+details summary { cursor: pointer; color: var(--muted); font-size: 14px; padding: 2px 0; }
+.leer { color: var(--muted); font-size: 14px; }
+.punkte { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 2px; margin-top: 6px; }
+.punkte i { height: 22px; border-radius: 3px; background: var(--panel2); }
+.punkte i.an { background: color-mix(in srgb, var(--accent) 70%, transparent); }
+.punkte i.aus { background: color-mix(in srgb, var(--minus) 35%, transparent); }
 </style>
 </head>
 <body>
-<main>
-  <h1>MC-Stats</h1>
-  <div class="sub" id="sub">lade …</div>
-  <div id="inhalt"></div>
-</main>
+<header><div class="kopf">
+  <div class="logo">$</div>
+  <div><h1>MC-Stats</h1><div class="st" id="status">lade …</div></div>
+  <button class="k" id="neu" aria-label="Neu laden">↻</button>
+</div></header>
+<main id="inhalt"><div class="karte leer">Lade Daten …</div></main>
+<nav><div class="in" id="nav"></div></nav>
 <script>
+const SEITEN = [
+  ["start", "Start", "M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"],
+  ["rang", "Rangliste", "M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0zM7 6H4a3 3 0 0 0 3 4M17 6h3a3 3 0 0 1-3 4"],
+  ["verlauf", "Verlauf", "M3 3v18h18M7 15l4-4 3 3 6-7"],
+  ["stats", "Statistik", "M5 20V10M12 20V4M19 20v-7"],
+  ["server", "Server", "M4 5h16v6H4zM4 13h16v6H4zM8 8h.01M8 16h.01"],
+  ["geschichte", "Geschichte", "M12 8v4l3 2M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5"]
+];
+let seite = "start", D = null, bereich = 24, gStart = null;
+try { seite = localStorage.getItem("ks-seite") || seite; bereich = +localStorage.getItem("ks-bereich") || 24; } catch (e) {}
+
 const $ = s => document.querySelector(s);
-const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c]));
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const zahl = (n, d = 0) => Number(n || 0).toLocaleString("de-DE", { maximumFractionDigits: d });
-const geld = n => (n < 0 ? "−" : "") + "$" + zahl(Math.abs(n), 2);
-const zeit = s => s ? new Date(s).toLocaleString("de-DE", { weekday:"short", day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit" }) : "–";
+const geld = n => (n < 0 ? "−" : "") + "$" + zahl(Math.abs(n), Math.abs(n) >= 1000 ? 0 : 2);
+const kurzGeld = n => { const a = Math.abs(n), v = n < 0 ? "−" : ""; return v + "$" + (a >= 1e9 ? zahl(a / 1e9, 2) + " Mrd." : a >= 1e6 ? zahl(a / 1e6, 2) + " Mio." : a >= 1e4 ? zahl(a / 1e3, 1) + " Tsd." : zahl(a, 0)); };
+const delta = n => `<span class="${n >= 0 ? "plus" : "minus"}">${n >= 0 ? "+" : ""}${kurzGeld(n)}</span>`;
+const zeit = s => s ? new Date(s).toLocaleString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "–";
+const uhr = s => new Date(s).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
 function vor(s) {
   if (!s) return "";
   const m = Math.round((Date.now() - new Date(s)) / 60000);
-  return m < 1 ? "gerade eben" : m < 60 ? `vor ${m} Min.` : m < 1440 ? `vor ${Math.round(m / 60)} Std.` : `vor ${Math.round(m / 1440)} Tagen`;
+  return m < 1 ? "gerade eben" : m < 60 ? `vor ${m} Min.` : m < 1440 ? `vor ${Math.floor(m / 60)} Std. ${m % 60 ? (m % 60) + " Min." : ""}` : `vor ${Math.round(m / 1440)} Tagen`;
 }
 const STATUS = {
-  ok: ["Daten geholt", "plus"], server_aus: ["Server ist aus", "warn"], selbst_online: ["Du warst selbst online", "warn"],
-  notaus: ["Notaus, sofort raus", "minus"], keine_daten: ["Keine Antwort auf /bal", "warn"], fehler: ["Fehler", "minus"]
+  ok: ["Daten geholt", "gut"], server_aus: ["Server ist aus", "warn"], selbst_online: ["Du warst selbst online", "warn"],
+  notaus: ["Notaus", "schlecht"], keine_daten: ["Keine Antwort", "warn"], fehler: ["Fehler", "schlecht"]
 };
+const ARTEN = { shop_kauf: "Shop-Kauf", verkauf: "Verkauf", auktion_kauf: "Auktion gekauft", auktion_verkauf: "Auktion verkauft",
+  ueberweisung_raus: "Überweisung raus", ueberweisung_rein: "Überweisung rein", kredit_zurueck: "Kredit zurückgezahlt" };
 
-function schluesselHolen() {
+// ------------------------------------------------------------------ Laden und Entschlüsseln
+function schluessel() {
   let k = location.hash.slice(1);
   try { if (k) localStorage.setItem("ks-key", k); else k = localStorage.getItem("ks-key") || ""; } catch (e) {}
   return k;
 }
-function b64url(s) { s = s.replace(/-/g, "+").replace(/_/g, "/"); while (s.length % 4) s += "="; return Uint8Array.from(atob(s), c => c.charCodeAt(0)); }
-
+const b64 = s => { s = s.replace(/-/g, "+").replace(/_/g, "/"); while (s.length % 4) s += "="; return Uint8Array.from(atob(s), c => c.charCodeAt(0)); };
 async function laden() {
-  const k = schluesselHolen();
-  if (!k) { $("#sub").textContent = "Schlüssel fehlt"; $("#inhalt").innerHTML = `<div class="karte">Öffne die Seite über deinen persönlichen Link (mit # am Ende).</div>`; return; }
+  const k = schluessel();
+  if (!k) { $("#status").textContent = "Schlüssel fehlt"; $("#inhalt").innerHTML = `<div class="karte">Öffne die Seite über deinen persönlichen Link (mit # am Ende).</div>`; return; }
+  $("#neu").textContent = "…";
   try {
     const r = await fetch("daten.enc?t=" + Date.now(), { cache: "no-store" });
     if (!r.ok) throw new Error("Noch keine Daten (" + r.status + ")");
     const roh = new Uint8Array(await r.arrayBuffer());
-    const key = await crypto.subtle.importKey("raw", b64url(k), "AES-GCM", false, ["decrypt"]);
+    const key = await crypto.subtle.importKey("raw", b64(k), "AES-GCM", false, ["decrypt"]);
     const klar = await crypto.subtle.decrypt({ name: "AES-GCM", iv: roh.slice(0, 12) }, key, roh.slice(12));
-    zeige(JSON.parse(new TextDecoder().decode(klar)));
+    D = JSON.parse(new TextDecoder().decode(klar));
+    try { localStorage.setItem("ks-cache", JSON.stringify(D)); } catch (e) {}
+    zeichne();
   } catch (e) {
-    $("#sub").textContent = "Konnte nicht laden";
-    $("#inhalt").innerHTML = `<div class="karte minus">${esc(e.message || "Falscher Schlüssel")}</div>`;
+    if (!D) try { D = JSON.parse(localStorage.getItem("ks-cache")); } catch (x) {}
+    if (D) { zeichne(); $("#status").innerHTML += ` · <span class="warn">offline</span>`; }
+    else $("#inhalt").innerHTML = `<div class="karte minus">${esc(e.message || "Falscher Schlüssel")}</div>`;
   }
+  $("#neu").textContent = "↻";
 }
 
-function zeige(d) {
-  const l = d.letzterLauf || {}, ok = d.letzterErfolg || {};
-  const [st, cls] = STATUS[l.status] || [l.status || "?", ""];
-  $("#sub").innerHTML = `Letzter Check ${vor(l.zeit)} · <span class="${cls}">${st}</span>`;
-  const v = d.verlauf || [];
-  let h = `<div class="karte"><div class="t">Kontostand</div>
-    <div class="gross">${ok.kontostand != null ? geld(ok.kontostand) : "?"}</div>
-    <div class="klein">${ok.zeit ? "Stand " + zeit(ok.zeit) + " (" + vor(ok.zeit) + ")" : "noch kein erfolgreicher Check"}</div>
-    ${aenderung(v)}</div>`;
-  if (l.status !== "ok") h += `<div class="karte"><div class="t">Letzter Versuch</div><div class="${cls}">${st}</div>
-    <div class="klein">${esc(l.grund || l.notaus || "")}</div></div>`;
-  h += `<div class="karte"><div class="t">Verlauf</div>${kurve(v)}</div>`;
-  const top = d.topgeld || [];
-  h += `<div class="karte"><div class="t">Top Geld ${d.topgeldZeit ? "· " + vor(d.topgeldZeit) : ""}</div>${top.length
-    ? `<table>${top.map(r => `<tr><td>${r.platz}.</td><td>${esc(r.name)}</td><td class="z">${geld(r.geld)}</td></tr>`).join("")}</table>`
-    : `<div class="klein">Noch nicht erkannt.</div>${(ok.nachrichten || []).length ? `<details><summary>Antworten vom Server</summary><div class="klein">${ok.nachrichten.map(esc).join("<br>")}</div></details>` : ""}`}</div>`;
-  const on = l.online || ok.online || [];
-  h += `<div class="karte"><div class="t">Online beim letzten Check (${l.onlineAnzahl ?? on.length})</div>${on.length ? on.map(n => `<span class="chip">${esc(n)}</span>`).join("") : `<div class="klein">niemand</div>`}</div>`;
-  const laeufe = (d.laeufe || []).slice(-12).reverse();
-  h += `<div class="karte"><details><summary>Letzte Checks</summary><table>${laeufe.map(x => {
-    const [s, c] = STATUS[x.status] || [x.status, ""];
-    return `<tr><td>${zeit(x.zeit)}</td><td class="${c}">${s}${x.notaus ? "<br><span class='klein'>" + esc(x.notaus) + "</span>" : ""}</td></tr>`;
-  }).join("")}</table></details></div>`;
-  $("#inhalt").innerHTML = h;
+// ------------------------------------------------------------------ Hilfen für Auswertungen
+const ok = () => D.letzterErfolg || {};
+const ichName = () => ok().spieler || D.letzterLauf?.spieler || "";
+const verlauf = () => (D.verlauf || []).map(p => ({ t: +new Date(p.zeit), v: p.kontostand }));
+function wertVor(stunden) {
+  const v = verlauf(); if (v.length < 2) return null;
+  const grenze = v[v.length - 1].t - stunden * 3600e3;
+  let best = null; for (const p of v) if (p.t <= grenze) best = p;
+  return best;
+}
+function proStunde() {
+  const v = verlauf(); if (v.length < 2) return null;
+  const ende = v[v.length - 1];
+  const start = [...v].reverse().find(p => ende.t - p.t >= 2 * 3600e3) || v[0];
+  const h = (ende.t - start.t) / 3600e3; if (h < 0.2) return null;
+  return (ende.v - start.v) / h;
+}
+function meinRang() {
+  const t = D.topgeld || [], n = ichName().toLowerCase();
+  const i = t.findIndex(r => r.name.toLowerCase() === n);
+  return i < 0 ? null : { platz: t[i].platz, ueber: t[i - 1], unter: t[i + 1], ich: t[i] };
 }
 
-function aenderung(v) {
-  if (v.length < 2) return "";
-  const jetzt = v[v.length - 1], grenze = new Date(jetzt.zeit) - 24 * 3600e3;
-  const alt = [...v].reverse().find(p => new Date(p.zeit) <= grenze) || v[0];
-  const diff = jetzt.kontostand - alt.kontostand;
-  return `<div class="klein ${diff >= 0 ? "plus" : "minus"}">${diff >= 0 ? "+" : ""}${geld(diff)} seit ${zeit(alt.zeit)}</div>`;
+// ------------------------------------------------------------------ Diagramm (eine oder mehrere Linien, antippbar)
+function diagramm(id, reihen, opt = {}) {
+  const alle = reihen.flatMap(r => r.p); if (alle.length < 2) return `<div class="leer">Kommt, sobald es mehrere Checks gibt.</div>`;
+  const B = 640, H = opt.h || 220, L = 8, R = 8, O = 14, U = 22;
+  const t0 = Math.min(...alle.map(p => p.t)), t1 = Math.max(...alle.map(p => p.t));
+  let lo = Math.min(...alle.map(p => p.v)), hi = Math.max(...alle.map(p => p.v));
+  if (hi === lo) { hi += 1; lo -= 1; }
+  const X = t => L + (t - t0) / ((t1 - t0) || 1) * (B - L - R), Y = v => O + (1 - (v - lo) / (hi - lo)) * (H - O - U);
+  let s = "";
+  for (let i = 0; i <= 3; i++) { const y = O + i * (H - O - U) / 3; s += `<line x1="${L}" x2="${B - R}" y1="${y}" y2="${y}" stroke="var(--line)"/>`; }
+  reihen.forEach((r, i) => {
+    if (r.p.length < 1) return;
+    const d = r.p.map((p, j) => (j ? "L" : "M") + X(p.t).toFixed(1) + " " + Y(p.v).toFixed(1)).join(" ");
+    if (reihen.length === 1) s += `<path d="${d} L${X(r.p[r.p.length - 1].t).toFixed(1)} ${H - U} L${X(r.p[0].t).toFixed(1)} ${H - U}Z" fill="${r.f}" opacity=".12"/>`;
+    s += `<path d="${d}" fill="none" stroke="${r.f}" stroke-width="${r.dick ? 3 : 2}" stroke-linejoin="round" stroke-linecap="round"/>`;
+  });
+  s += `<text x="${L}" y="11">${kurzGeld(hi)}</text><text x="${L}" y="${H - U - 4}">${kurzGeld(lo)}</text>`;
+  s += `<text x="${L}" y="${H - 5}">${zeit(t0)}</text><text x="${B - R}" y="${H - 5}" text-anchor="end">${zeit(t1)}</text>`;
+  s += `<line id="${id}-m" y1="${O}" y2="${H - U}" stroke="var(--muted)" stroke-dasharray="3 3" opacity="0"/>`;
+  window["_" + id] = { reihen, X, B, t0, t1, L, R };
+  return `<svg class="graf" id="${id}" viewBox="0 0 ${B} ${H}" role="img" aria-label="${esc(opt.titel || "Verlauf")}">${s}</svg><div class="tip" id="${id}-t">Tippe auf die Kurve für Werte</div>`;
+}
+function antippbar(id) {
+  const el = document.getElementById(id); if (!el) return;
+  const g = window["_" + id];
+  const zeig = ev => {
+    const r = el.getBoundingClientRect(), x = ((ev.touches ? ev.touches[0].clientX : ev.clientX) - r.left) / r.width * g.B;
+    const t = g.t0 + (x - g.L) / (g.B - g.L - g.R) * (g.t1 - g.t0);
+    const teile = g.reihen.map(rr => { let b = rr.p[0]; for (const p of rr.p) if (Math.abs(p.t - t) < Math.abs(b.t - t)) b = p; return { rr, b }; });
+    const m = document.getElementById(id + "-m"); const xx = g.X(teile[0].b.t);
+    m.setAttribute("x1", xx); m.setAttribute("x2", xx); m.setAttribute("opacity", 1);
+    document.getElementById(id + "-t").innerHTML = zeit(teile[0].b.t) + " · " +
+      teile.map(({ rr, b }) => `<b style="color:${rr.f}">${g.reihen.length > 1 ? esc(rr.n) + " " : ""}${geld(b.v)}</b>`).join(" · ");
+  };
+  el.addEventListener("click", zeig); el.addEventListener("touchmove", zeig, { passive: true });
 }
 
-function kurve(v) {
-  const p = v.slice(-200);
-  if (p.length < 2) return `<div class="klein">Kommt, sobald es mehrere Checks gibt.</div>`;
-  const B = 600, H = 180, t0 = new Date(p[0].zeit), t1 = new Date(p[p.length - 1].zeit);
-  const min = Math.min(...p.map(x => x.kontostand)), max = Math.max(...p.map(x => x.kontostand)), sp = (max - min) || 1;
-  const X = z => 6 + (new Date(z) - t0) / ((t1 - t0) || 1) * (B - 12), Y = w => H - 22 - (w - min) / sp * (H - 40);
-  const pfad = p.map((x, i) => (i ? "L" : "M") + X(x.zeit).toFixed(1) + " " + Y(x.kontostand).toFixed(1)).join(" ");
-  return `<svg viewBox="0 0 ${B} ${H}" width="100%" role="img" aria-label="Kontostand-Verlauf">
-    <path d="${pfad}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round"/>
-    <text x="6" y="12">${geld(max)}</text><text x="6" y="${H - 26}">${geld(min)}</text>
-    <text x="6" y="${H - 4}">${zeit(p[0].zeit)}</text><text x="${B - 6}" y="${H - 4}" text-anchor="end">${zeit(p[p.length - 1].zeit)}</text></svg>`;
+// ------------------------------------------------------------------ Seiten
+function start() {
+  const o = ok(), l = D.letzterLauf || {}, v = verlauf(), rg = meinRang(), ps = proStunde();
+  const v1 = wertVor(1), v24 = wertVor(24), jetzt = o.kontostand;
+  const naechster = l.zeit ? new Date(+new Date(l.zeit) + 15 * 60e3) : null;
+  let h = `<div class="karte held"><div class="t">Kontostand · ${esc(ichName())}</div>
+    <div class="gross gold">${jetzt != null ? geld(jetzt) : "?"}</div>
+    <div class="klein">${o.zeit ? "Stand " + zeit(o.zeit) + " · " + vor(o.zeit) : "noch kein erfolgreicher Check"}</div>
+    <div class="chips">
+      ${v1 && jetzt != null ? `<span class="chip">1 Std. ${delta(jetzt - v1.v)}</span>` : ""}
+      ${v24 && jetzt != null ? `<span class="chip">24 Std. ${delta(jetzt - v24.v)}</span>` : ""}
+      ${ps != null ? `<span class="chip">≈ ${delta(ps)} / Std.</span>` : ""}
+      ${rg ? `<span class="chip gold">Platz ${rg.platz}</span>` : ""}
+    </div>
+    ${v.length > 1 ? diagramm("mini", [{ n: "Du", f: "var(--gold)", p: v.slice(-96), dick: 1 }], { h: 120, titel: "Kontostand" }) : ""}</div>`;
+  if (rg) {
+    h += `<div class="raster">
+      <div class="karte"><div class="t">Bis Platz ${rg.platz - 1}</div><div class="mittel">${rg.ueber ? kurzGeld(rg.ueber.geld - rg.ich.geld) : "–"}</div>
+        <div class="klein">${rg.ueber ? esc(rg.ueber.name) + (ps > 0 ? " · ca. " + dauer((rg.ueber.geld - rg.ich.geld) / ps) : "") : "Du bist ganz oben"}</div></div>
+      <div class="karte"><div class="t">Vorsprung</div><div class="mittel">${rg.unter ? kurzGeld(rg.ich.geld - rg.unter.geld) : "–"}</div>
+        <div class="klein">${rg.unter ? "vor " + esc(rg.unter.name) : ""}</div></div></div>`;
+  }
+  const [st, cls] = STATUS[l.status] || [l.status, ""];
+  h += `<div class="raster">
+    <div class="karte"><div class="t">Leben</div><div class="mittel">${o.leben != null ? "❤ " + zahl(o.leben / 2, 1) : "–"}</div><div class="klein">von 10 Herzen</div></div>
+    <div class="karte"><div class="t">Hunger</div><div class="mittel">${o.essen != null ? "🍗 " + zahl(o.essen / 2, 1) : "–"}</div><div class="klein">von 10</div></div>
+    <div class="karte"><div class="t">Level</div><div class="mittel">${o.level != null ? "✦ " + o.level : "–"}</div><div class="klein">Erfahrung</div></div>
+    <div class="karte"><div class="t">Position</div><div class="mittel" style="font-size:17px">${o.position ? o.position.join(" / ") : "–"}</div><div class="klein">x / y / z</div></div></div>`;
+  h += `<div class="karte"><div class="t">Letzter Check</div>
+    <div style="margin-top:4px"><span class="chip ${cls}">${st}</span> <span class="klein">${vor(l.zeit)}${l.dauerMs ? " · " + zahl(l.dauerMs / 1000, 1) + " s auf dem Server" : ""}</span></div>
+    ${l.grund || l.notaus ? `<div class="klein" style="margin-top:6px">${esc(l.grund || l.notaus)}</div>` : ""}
+    ${naechster ? `<div class="klein" style="margin-top:6px">Nächster Check etwa ${uhr(naechster)} Uhr</div>` : ""}</div>`;
+  const on = l.online || [];
+  h += `<div class="karte"><div class="t">Online beim letzten Check (${on.length})</div>
+    <div class="chips">${on.length ? on.map(n => `<span class="chip">${esc(n)}</span>`).join("") : `<span class="leer">niemand außer dem Bot</span>`}</div></div>`;
+  return h;
+}
+function dauer(stunden) {
+  if (!isFinite(stunden) || stunden <= 0) return "–";
+  return stunden < 1 ? Math.round(stunden * 60) + " Min." : stunden < 48 ? zahl(stunden, 1) + " Std." : zahl(stunden / 24, 1) + " Tage";
 }
 
+function rang() {
+  const t = D.topgeld || [], n = ichName().toLowerCase(), tv = D.topVerlauf || [];
+  if (!t.length) return `<div class="karte leer">Noch keine Rangliste.</div>`;
+  const alt = (() => { const grenze = Date.now() - 24 * 3600e3; let b = null; for (const p of tv) if (+new Date(p.zeit) <= grenze) b = p; return b || tv[0]; })();
+  const ich = t.find(r => r.name.toLowerCase() === n);
+  let h = `<div class="karte"><div class="t">Top 10 · ${vor(D.topgeldZeit)}</div><table>
+    <tr><th></th><th>Spieler</th><th class="z">Geld</th><th class="z">24 Std.</th></tr>
+    ${t.map(r => {
+      const vorher = alt && alt.werte[r.name], d = vorher != null ? r.geld - vorher : null;
+      return `<tr class="${r.name.toLowerCase() === n ? "ich" : ""}"><td><span class="rang r${r.platz}">${r.platz}</span></td><td>${esc(r.name)}${ich && r !== ich ? `<div class="klein">${r.geld > ich.geld ? "+" : "−"}${kurzGeld(Math.abs(r.geld - ich.geld))} zu dir</div>` : ""}</td>
+        <td class="z">${kurzGeld(r.geld)}</td><td class="z">${d == null ? "–" : delta(d)}</td></tr>`;
+    }).join("")}</table></div>`;
+  // Kurven: du + die drei über/um dich
+  const farben = ["var(--s1)", "var(--s2)", "var(--s3)", "var(--s4)", "var(--s5)"];
+  const idx = ich ? t.indexOf(ich) : 0;
+  const namen = t.slice(Math.max(0, idx - 2), idx + 3).map(r => r.name);
+  const reihen = namen.map((nm, i) => ({ n: nm, f: farben[i % 5], dick: nm.toLowerCase() === n, p: tv.filter(p => p.werte[nm] != null).map(p => ({ t: +new Date(p.zeit), v: p.werte[nm] })) }));
+  h += `<div class="karte"><div class="t">Rennen um die Plätze</div>${diagramm("rennen", reihen, { titel: "Top-Spieler über die Zeit" })}
+    <div class="legende">${reihen.map(r => `<span style="--f:${r.f}">${esc(r.n)}</span>`).join("")}</div>
+    <div class="klein" style="margin-top:6px">Die Rangliste zeigt gerundete Werte (z. B. 8.4M), dein Kontostand oben ist genau.</div></div>`;
+  return h;
+}
+
+function verlaufSeite() {
+  const v = verlauf(), grenze = bereich ? Date.now() - bereich * 3600e3 : 0, p = v.filter(x => x.t >= grenze);
+  const tage = {}; for (const x of v) { const d = new Date(x.t).toLocaleDateString("de-DE"); (tage[d] ||= []).push(x.v); }
+  let h = `<div class="karte"><div class="t">Kontostand</div><div class="knoepfe">
+    ${[[6, "6 Std."], [24, "24 Std."], [168, "7 Tage"], [0, "Alles"]].map(([b, n]) => `<button data-b="${b}" class="${b === bereich ? "aktiv" : ""}">${n}</button>`).join("")}</div>
+    ${diagramm("haupt", [{ n: "Kontostand", f: "var(--gold)", p, dick: 1 }], { titel: "Kontostand" })}</div>`;
+  if (p.length > 1) {
+    const lo = Math.min(...p.map(x => x.v)), hi = Math.max(...p.map(x => x.v)), z = p[p.length - 1].v - p[0].v, h_ = (p[p.length - 1].t - p[0].t) / 3600e3;
+    h += `<div class="raster">
+      <div class="karte"><div class="t">Zuwachs</div><div class="mittel">${delta(z)}</div><div class="klein">im Zeitraum</div></div>
+      <div class="karte"><div class="t">Pro Stunde</div><div class="mittel">${h_ > 0.2 ? delta(z / h_) : "–"}</div><div class="klein">Durchschnitt</div></div>
+      <div class="karte"><div class="t">Höchster</div><div class="mittel">${kurzGeld(hi)}</div></div>
+      <div class="karte"><div class="t">Niedrigster</div><div class="mittel">${kurzGeld(lo)}</div></div></div>`;
+  }
+  const tl = Object.entries(tage).reverse();
+  if (tl.length) h += `<div class="karte"><div class="t">Pro Tag</div><table><tr><th>Tag</th><th class="z">Ende</th><th class="z">Änderung</th></tr>
+    ${tl.map(([d, w]) => `<tr><td>${d}</td><td class="z">${kurzGeld(w[w.length - 1])}</td><td class="z">${delta(w[w.length - 1] - w[0])}</td></tr>`).join("")}</table></div>`;
+  return h;
+}
+
+const STAT_ZEILEN = [
+  ["play_time", "Spielzeit", w => zahl(w / 72000, 1) + " Std."], ["time_since_death", "Seit dem letzten Tod", w => dauer(w / 72000)],
+  ["deaths", "Tode", zahl], ["mob_kills", "Monster getötet", zahl], ["player_kills", "Spieler getötet", zahl],
+  ["damage_dealt", "Schaden ausgeteilt", w => zahl(w / 20, 0) + " ❤"], ["damage_taken", "Schaden bekommen", w => zahl(w / 20, 0) + " ❤"],
+  ["walk_one_cm", "Gelaufen", w => zahl(w / 1e5, 2) + " km"], ["sprint_one_cm", "Gesprintet", w => zahl(w / 1e5, 2) + " km"],
+  ["aviate_one_cm", "Mit Elytra geflogen", w => zahl(w / 1e5, 2) + " km"], ["fly_one_cm", "Geflogen", w => zahl(w / 1e5, 2) + " km"],
+  ["swim_one_cm", "Geschwommen", w => zahl(w / 1e5, 2) + " km"], ["fall_one_cm", "Gefallen", w => zahl(w / 100, 0) + " m"],
+  ["boat_one_cm", "Boot", w => zahl(w / 1e5, 2) + " km"], ["horse_one_cm", "Pferd", w => zahl(w / 1e5, 2) + " km"],
+  ["jump", "Sprünge", zahl], ["fish_caught", "Fische gefangen", zahl], ["animals_bred", "Tiere gezüchtet", zahl],
+  ["traded_with_villager", "Mit Dorfbewohnern gehandelt", zahl], ["enchant_item", "Verzaubert", zahl], ["open_chest", "Kisten geöffnet", zahl],
+  ["sleep_in_bed", "Geschlafen", zahl], ["leave_game", "Spiel verlassen", zahl]
+];
+const SUMMEN = [["abgebaut", "Blöcke abgebaut", "⛏"], ["hergestellt", "Items hergestellt", "🛠"], ["benutzt", "Items benutzt", "✋"],
+  ["aufgehoben", "Aufgehoben", "📦"], ["fallengelassen", "Fallen gelassen", "🗑"], ["kaputt", "Werkzeuge kaputt", "💥"]];
+function stats() {
+  const s = D.statistiken;
+  if (!s) return `<div class="karte leer">Die Minecraft-Statistiken kommen mit dem nächsten Check.</div>`;
+  const a = s.allgemein || {}, su = s.summen || {};
+  let h = `<div class="klein" style="margin:0 2px 8px">Stand ${zeit(D.statistikZeit)} · ${vor(D.statistikZeit)}</div><div class="raster">
+    <div class="karte"><div class="t">Spielzeit</div><div class="mittel">${zahl((a.play_time || 0) / 72000, 1)} h</div></div>
+    <div class="karte"><div class="t">K/D</div><div class="mittel">${zahl(((a.mob_kills || 0) + (a.player_kills || 0)) / Math.max(1, a.deaths || 0), 1)}</div><div class="klein">Kills pro Tod</div></div>
+    ${SUMMEN.slice(0, 2).map(([k, n, i]) => `<div class="karte"><div class="t">${n}</div><div class="mittel">${i} ${zahl(su[k])}</div></div>`).join("")}</div>`;
+  h += `<div class="karte"><div class="t">Allgemein</div>${STAT_ZEILEN.filter(([k]) => a[k] != null).map(([k, n, f]) => `<div class="zeile"><span>${n}</span><b>${f(a[k])}</b></div>`).join("")}</div>`;
+  h += `<div class="karte"><div class="t">Gegenstände</div>${SUMMEN.map(([k, n, i]) => `<div class="zeile"><span>${i} ${n}</span><b>${zahl(su[k])}</b></div>`).join("")}</div>`;
+  const kills = Object.entries(s.kills || {}).sort((x, y) => y[1] - x[1]), max = kills[0]?.[1] || 1;
+  if (kills.length) h += `<div class="karte"><div class="t">Am meisten getötet</div>${kills.slice(0, 12).map(([k, w]) => `<div style="margin-top:8px"><div class="zeile" style="border:0;padding:0"><span>${name(k)}</span><b>${zahl(w)}</b></div><div class="balken"><i style="width:${w / max * 100}%"></i></div></div>`).join("")}</div>`;
+  const von = Object.entries(s.getoetetVon || {}).sort((x, y) => y[1] - x[1]);
+  if (von.length) h += `<div class="karte"><div class="t">Gestorben durch</div>${von.slice(0, 10).map(([k, w]) => `<div class="zeile"><span>${name(k)}</span><b>${zahl(w)}×</b></div>`).join("")}</div>`;
+  return h;
+}
+const NAMEN = { zombie: "Zombie", skeleton: "Skelett", creeper: "Creeper", spider: "Spinne", enderman: "Enderman", cow: "Kuh", pig: "Schwein",
+  sheep: "Schaf", chicken: "Huhn", player: "Spieler", drowned: "Ertrunkener", husk: "Wüstenzombie", witch: "Hexe", slime: "Schleim",
+  phantom: "Phantom", blaze: "Lohe", piglin: "Piglin", zombified_piglin: "Zombifizierter Piglin", wither_skeleton: "Witherskelett",
+  iron_golem: "Eisengolem", villager: "Dorfbewohner", pillager: "Plünderer", stray: "Eiswanderer", cave_spider: "Höhlenspinne", silverfish: "Silberfischchen" };
+const name = k => NAMEN[k] || k.replace(/_/g, " ").replace(/^./, c => c.toUpperCase());
+
+function server() {
+  const ov = D.onlineVerlauf || [], letzte = ov.slice(-96), laeufe = (D.laeufe || []).slice(-20).reverse();
+  const an = letzte.filter(p => p.serverAn).length;
+  const gesehen = {};
+  for (const p of ov) for (const n of p.spieler || []) { const g = (gesehen[n] ||= { n: 0, zuletzt: null }); g.n++; g.zuletzt = p.zeit; }
+  const liste = Object.entries(gesehen).sort((a, b) => new Date(b[1].zuletzt) - new Date(a[1].zuletzt));
+  let h = `<div class="karte"><div class="t">Server an/aus (letzte ${letzte.length} Checks)</div>
+    <div class="mittel" style="margin-top:4px">${letzte.length ? zahl(an / letzte.length * 100) + " %" : "–"} <span class="klein">der Zeit an</span></div>
+    <div class="punkte">${letzte.map(p => `<i class="${p.serverAn ? "an" : "aus"}" title="${zeit(p.zeit)}"></i>`).join("")}</div>
+    <div class="klein" style="margin-top:4px">${letzte[0] ? zeit(letzte[0].zeit) + " bis jetzt" : ""}</div></div>`;
+  h += `<div class="karte"><div class="t">Wer war online</div>${liste.length ? `<table><tr><th>Spieler</th><th class="z">Checks online</th><th class="z">Zuletzt</th></tr>
+    ${liste.map(([n, g]) => `<tr><td>${esc(n)}</td><td class="z">${g.n}</td><td class="z">${vor(g.zuletzt)}</td></tr>`).join("")}</table>` : `<div class="leer">Noch niemand gesehen.</div>`}</div>`;
+  h += `<div class="karte"><div class="t">Letzte Checks</div><table>${laeufe.map(x => { const [s, c] = STATUS[x.status] || [x.status, ""];
+    return `<tr><td>${zeit(x.zeit)}</td><td class="z"><span class="chip ${c}">${s}</span>${x.notaus || x.grund ? `<div class="klein">${esc(x.notaus || x.grund)}</div>` : ""}</td></tr>`; }).join("")}</table>
+    <div class="klein" style="margin-top:8px">Der Bot ist bei jedem Check höchstens 10 Sekunden auf dem Server und geht bei Gefahr sofort.</div></div>`;
+  return h;
+}
+
+function geschichte() {
+  const hi = D.historie;
+  if (!hi) return `<div class="karte leer">Keine alte Geschichte vorhanden.</div>`;
+  const g = hi.geld || {}, tage = Object.entries(g.proTag || {}), mx = Math.max(1, ...tage.map(([, v]) => Math.max(v.einnahmen, v.ausgaben)));
+  let h = `<div class="klein" style="margin:0 2px 8px">Aus deinen Minecraft-Logs bis ${zeit(hi.erstellt)}. Verkaufskisten und Farmen stehen nicht im Chat und fehlen hier.</div>
+    <div class="raster"><div class="karte"><div class="t">Einnahmen</div><div class="mittel plus">${kurzGeld(g.einnahmen)}</div></div>
+    <div class="karte"><div class="t">Ausgaben</div><div class="mittel minus">${kurzGeld(g.ausgaben)}</div></div>
+    ${g.verdienst?.Stunde ? `<div class="karte"><div class="t">Verdienst laut Server</div><div class="mittel">${kurzGeld(g.verdienst.Stunde)}</div><div class="klein">pro Stunde Spielzeit</div></div>` : ""}</div>`;
+  h += `<div class="karte"><div class="t">Pro Tag</div>${tage.slice(-14).reverse().map(([d, v]) => `<div style="margin-top:10px"><div class="zeile" style="border:0;padding:0"><span>${new Date(d).toLocaleDateString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit" })}</span><span>${delta(v.einnahmen)} · ${delta(-v.ausgaben)}</span></div>
+    <div class="balken"><i style="width:${v.einnahmen / mx * 100}%;background:var(--plus)"></i></div><div class="balken" style="margin-top:3px"><i style="width:${v.ausgaben / mx * 100}%;background:var(--minus)"></i></div></div>`).join("")}</div>`;
+  h += `<div class="karte"><div class="t">Wofür das Geld weg ist</div><table>${(g.meistGekauft || []).slice(0, 12).map(s => `<tr><td>${esc(s.sache)}</td><td class="z">${zahl(s.menge)}×</td><td class="z minus">${kurzGeld(s.ausgegeben)}</td></tr>`).join("")}</table></div>`;
+  h += `<div class="karte"><div class="t">Nach Art</div>${Object.entries(g.proArt || {}).map(([k, v]) => `<div class="zeile"><span>${ARTEN[k] || k} <span class="klein">${v.anzahl}×</span></span><b class="${v.summe >= 0 ? "plus" : "minus"}">${kurzGeld(v.summe)}</b></div>`).join("")}</div>`;
+  h += `<div class="karte"><details><summary>Letzte 60 Buchungen</summary><table>${(g.verlauf || []).slice(-60).reverse().map(e => `<tr><td><div>${ARTEN[e.art] || e.art}</div><div class="klein">${zeit(e.zeit)} · ${esc([e.menge && e.menge + "×", e.sache, e.person].filter(Boolean).join(" "))}</div></td><td class="z ${e.betrag >= 0 ? "plus" : "minus"}">${geld(e.betrag)}</td></tr>`).join("")}</table></details></div>`;
+  const sp = Object.entries(hi.spieler || {}).sort((a, b) => b[1].beitritte - a[1].beitritte);
+  if (sp.length) h += `<div class="karte"><div class="t">Spieler (aus den Logs)</div><table><tr><th>Spieler</th><th class="z">Joins</th><th class="z">Kills</th><th class="z">Tode</th><th class="z">Ziele</th></tr>
+    ${sp.map(([n, p]) => `<tr><td>${esc(n)}</td><td class="z">${p.beitritte}</td><td class="z">${p.kills}</td><td class="z">${p.tode}</td><td class="z">${p.ziele.length}</td></tr>`).join("")}</table></div>`;
+  return h;
+}
+
+// ------------------------------------------------------------------ Rahmen
+function nav() {
+  $("#nav").innerHTML = SEITEN.map(([id, n, d]) => `<button data-s="${id}" class="${id === seite ? "aktiv" : ""}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="${d}"/></svg>${n}</button>`).join("");
+  $("#nav").querySelectorAll("button").forEach(b => b.onclick = () => { seite = b.dataset.s; try { localStorage.setItem("ks-seite", seite); } catch (e) {} nav(); zeichne(); scrollTo(0, 0); });
+}
+function zeichne() {
+  if (!D) return;
+  const l = D.letzterLauf || {}, [st, cls] = STATUS[l.status] || [l.status || "?", ""];
+  $("#status").innerHTML = `Check ${vor(l.zeit)} · <span class="${cls === "gut" ? "plus" : cls === "schlecht" ? "minus" : "warn"}">${st}</span>`;
+  const f = { start, rang, verlauf: verlaufSeite, stats, server, geschichte }[seite] || start;
+  $("#inhalt").innerHTML = f();
+  ["mini", "rennen", "haupt"].forEach(antippbar);
+  document.querySelectorAll("[data-b]").forEach(b => b.onclick = () => { bereich = +b.dataset.b; try { localStorage.setItem("ks-bereich", bereich); } catch (e) {} zeichne(); });
+}
+$("#neu").onclick = laden;
+nav();
+try { D = JSON.parse(localStorage.getItem("ks-cache")); if (D) zeichne(); } catch (e) {}
 laden();
 setInterval(laden, 60000);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) laden(); });
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 </script>
 </body>
 </html>
