@@ -87,7 +87,8 @@ public class Main {
 
     static final String BETRAG = "([\\d,]+(?:\\.\\d+)?[KkMmBb]?)";
     static final Pattern KONTOSTAND = Pattern.compile("^(?:Balance|Kontostand|Guthaben|Geld)\\s*:\\s*\\$" + BETRAG);
-    static final Pattern RANG = Pattern.compile("^\\s*#?(\\d{1,2})[.):]?\\s*(?:[-|»]\\s*)?([A-Za-z0-9_.]{2,17})\\s*(?:[-:|»]\\s*)?\\$" + BETRAG);
+    // z. B. "[Top 10] 1. Thomtorro1 – $270.2M" oder "#2 Name $3.4M"
+    static final Pattern RANG = Pattern.compile("^\\s*(?:\\[[^\\]]*\\]\\s*)?#?(\\d{1,2})[.):]?\\s+([A-Za-z0-9_.]{2,17})[^$\\d]{0,6}\\$" + BETRAG);
     static final Pattern PROXY_PORT = Pattern.compile("Connect to \\S+?:(\\d+)");
 
     static final Set<String> GEFAEHRLICH = Set.of("ZOMBIE", "ZOMBIE_VILLAGER", "HUSK", "DROWNED", "SKELETON", "STRAY",
@@ -352,6 +353,8 @@ public class Main {
         JsonArray sp = new JsonArray();
         spieler.forEach(sp::add);
         if (!spieler.isEmpty()) lauf.add("online", sp);
+        // Der Bot selbst zaehlt nicht als online
+        if (lauf.has("online")) lauf.getAsJsonArray("online").remove(new com.google.gson.JsonPrimitive(profil.getName()));
         lauf.addProperty("status", lauf.has("kontostand") ? "ok" : abbruch[0] != null ? "notaus" : "keine_daten");
         if (!lauf.has("kontostand") && lauf.has("getrennt")) lauf.addProperty("grund", "Server hat getrennt: " + lauf.get("getrennt").getAsString());
     }
