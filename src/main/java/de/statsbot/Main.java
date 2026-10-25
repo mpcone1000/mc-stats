@@ -142,6 +142,10 @@ public class Main {
                     java.net.http.HttpResponse.BodyHandlers.ofString());
                 System.out.println("Gesendet: " + r.statusCode());
             }
+            case "befehle" -> {
+                // Zum Pruefen: welche Befehle liegen im Kanal und lassen sich entschluesseln?
+                for (Befehle.Befehl b : Befehle.abholen(schluessel("KS_DATEN_SCHLUESSEL"), "12h")) System.out.println(b);
+            }
             case "historie" -> {
                 // Einmalig: Geld-Geschichte aus den PC-Logs (Export des PC-Mods) in die verschluesselten Daten legen
                 byte[] k = schluessel("KS_DATEN_SCHLUESSEL");

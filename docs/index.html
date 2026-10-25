@@ -10,62 +10,78 @@
 <title>MC-Stats</title>
 <style>
 :root {
-  --bg: #f3f4f7; --panel: #ffffff; --panel2: #f7f8fb; --text: #18202b; --muted: #687387; --line: #e2e6ee;
-  --accent: #2e7d4f; --gold: #b7791f; --plus: #1f8a4c; --minus: #c43c3c; --warn: #b26b00; --blue: #2f6fde;
-  --s1: #2e7d4f; --s2: #2f6fde; --s3: #b7791f; --s4: #9b4dca; --s5: #d4572b;
-  --shadow: 0 1px 2px rgba(16, 24, 40, .05), 0 4px 14px rgba(16, 24, 40, .05);
+  --bg: #f2f4f7; --panel: rgba(255,255,255,.86); --panel2: #f4f6fa; --text: #121926; --muted: #667085; --line: rgba(16,24,40,.08);
+  --accent: #1f9d55; --accent2: #16a34a; --gold: #c2850c; --plus: #16a34a; --minus: #dc2626; --warn: #d97706;
+  --s1: #16a34a; --s2: #2563eb; --s3: #d97706; --s4: #9333ea; --s5: #e11d48;
+  --shadow: 0 1px 2px rgba(16,24,40,.04), 0 8px 24px -8px rgba(16,24,40,.12); --radius: 20px;
 }
 @media (prefers-color-scheme: dark) {
-  :root { --bg: #0e1116; --panel: #171c24; --panel2: #1d232d; --text: #e8ecf2; --muted: #95a0b4; --line: #262e3a;
-    --accent: #4cc27f; --gold: #f2b544; --plus: #4cc27f; --minus: #ff7676; --warn: #ffb547; --blue: #6c9cff;
-    --s1: #4cc27f; --s2: #6c9cff; --s3: #f2b544; --s4: #c08cff; --s5: #ff8a5c; --shadow: none; }
+  :root { --bg: #07090d; --panel: rgba(22,27,36,.82); --panel2: #1a2030; --text: #eef2f7; --muted: #8b95a8; --line: rgba(255,255,255,.07);
+    --accent: #34d399; --accent2: #10b981; --gold: #fbbf24; --plus: #34d399; --minus: #f87171; --warn: #fbbf24;
+    --s1: #34d399; --s2: #60a5fa; --s3: #fbbf24; --s4: #c084fc; --s5: #fb7185; --shadow: 0 8px 30px -12px rgba(0,0,0,.6); }
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-html, body { margin: 0; background: var(--bg); color: var(--text);
-  font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-header { position: sticky; top: 0; z-index: 5; background: color-mix(in srgb, var(--bg) 88%, transparent);
-  backdrop-filter: blur(10px); padding: calc(10px + env(safe-area-inset-top)) 16px 10px; }
-.kopf { display: flex; align-items: center; gap: 10px; max-width: 760px; margin: 0 auto; }
-.logo { width: 34px; height: 34px; border-radius: 9px; background: linear-gradient(135deg, var(--accent), var(--gold));
-  display: grid; place-items: center; color: #fff; font-weight: 800; font-size: 15px; }
-.kopf h1 { font-size: 18px; margin: 0; line-height: 1.1; }
-.kopf .st { font-size: 12.5px; color: var(--muted); }
-.kopf button { margin-left: auto; }
-main { max-width: 760px; margin: 0 auto; padding: 4px 16px calc(96px + env(safe-area-inset-bottom)); }
-nav { position: fixed; bottom: 0; left: 0; right: 0; z-index: 6; background: var(--panel); border-top: 1px solid var(--line);
-  display: flex; justify-content: center; padding-bottom: env(safe-area-inset-bottom); }
-nav .in { display: flex; width: 100%; max-width: 760px; }
-nav button { flex: 1; background: none; border: 0; color: var(--muted); padding: 8px 2px 9px; font: inherit; font-size: 11px;
-  display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: pointer; }
+html, body { margin: 0; color: var(--text); background: var(--bg);
+  font: 16px/1.45 "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
+body { background: radial-gradient(1200px 500px at 50% -200px, color-mix(in srgb, var(--accent) 16%, transparent), transparent 70%), var(--bg); min-height: 100vh; }
+header { position: sticky; top: 0; z-index: 5; padding: calc(10px + env(safe-area-inset-top)) 16px 10px;
+  background: color-mix(in srgb, var(--bg) 70%, transparent); backdrop-filter: blur(16px) saturate(1.4); -webkit-backdrop-filter: blur(16px) saturate(1.4); }
+.kopf { display: flex; align-items: center; gap: 12px; max-width: 760px; margin: 0 auto; }
+.logo { width: 38px; height: 38px; border-radius: 12px; background: linear-gradient(135deg, var(--accent2), var(--gold));
+  display: grid; place-items: center; color: #fff; font-weight: 800; font-size: 17px; box-shadow: 0 6px 18px -6px color-mix(in srgb, var(--accent) 70%, transparent); }
+.kopf h1 { font-size: 19px; margin: 0; line-height: 1.1; letter-spacing: -.01em; }
+.kopf .st { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+.kopf button { margin-left: auto; width: 40px; height: 40px; padding: 0; font-size: 18px; }
+main { max-width: 760px; margin: 0 auto; padding: 6px 16px calc(110px + env(safe-area-inset-bottom)); }
+.rein { animation: rein .22s ease; }
+@keyframes rein { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+nav { position: fixed; left: 12px; right: 12px; bottom: calc(10px + env(safe-area-inset-bottom)); z-index: 6; display: flex; justify-content: center; }
+nav .in { display: flex; width: 100%; max-width: 520px; padding: 6px; gap: 2px; border-radius: 24px; border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--panel2) 88%, transparent); backdrop-filter: blur(18px) saturate(1.5); -webkit-backdrop-filter: blur(18px) saturate(1.5); box-shadow: var(--shadow); }
+nav button { flex: 1; background: none; border: 0; color: var(--muted); padding: 7px 2px 6px; font: inherit; font-size: 11px; font-weight: 600;
+  display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer; border-radius: 18px; transition: background .2s, color .2s; }
 nav button svg { width: 22px; height: 22px; }
-nav button.aktiv { color: var(--accent); font-weight: 600; }
-.karte { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 14px 16px; margin-bottom: 12px; box-shadow: var(--shadow); }
-.held { background: linear-gradient(145deg, color-mix(in srgb, var(--accent) 18%, var(--panel)), var(--panel) 60%); }
-.t { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
-.gross { font-size: clamp(32px, 9vw, 44px); font-weight: 800; letter-spacing: -.02em; font-variant-numeric: tabular-nums; line-height: 1.1; margin: 4px 0; }
-.mittel { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+nav button.aktiv { color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.karte { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; margin-bottom: 12px; box-shadow: var(--shadow);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+.held { position: relative; overflow: hidden; border: 0; color: #fff;
+  background: radial-gradient(400px 200px at 100% 0%, rgba(251,191,36,.35), transparent 60%), linear-gradient(150deg, #0f5132, #14532d 45%, #1e293b); }
+.held .t, .held .klein { color: rgba(255,255,255,.75); }
+.held .gross { color: #fde68a; text-shadow: 0 2px 20px rgba(251,191,36,.35); }
+.held .chip { background: rgba(255,255,255,.12); border-color: rgba(255,255,255,.14); color: #fff; }
+.held .chip .plus { color: #86efac; } .held .chip .minus { color: #fca5a5; }
+.held svg.graf text { fill: rgba(255,255,255,.6); }
+.held .tip { color: rgba(255,255,255,.7); }
+.t { font-size: 11.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; font-weight: 700; }
+.gross { font-size: clamp(34px, 10vw, 48px); font-weight: 800; letter-spacing: -.03em; font-variant-numeric: tabular-nums; line-height: 1.05; margin: 6px 0 4px; }
+.mittel { font-size: 22px; font-weight: 750; letter-spacing: -.01em; font-variant-numeric: tabular-nums; margin-top: 2px; }
 .klein { font-size: 13px; color: var(--muted); }
 .raster { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 12px; }
-.raster .karte { margin: 0; padding: 12px 14px; }
-.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-.chip { background: var(--panel2); border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; font-size: 13.5px; }
+.raster .karte { margin: 0; padding: 14px 16px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.chip { background: var(--panel2); border: 1px solid var(--line); border-radius: 999px; padding: 4px 11px; font-size: 13.5px; font-weight: 600; }
 .chip.gut { color: var(--plus); } .chip.schlecht { color: var(--minus); } .chip.warn { color: var(--warn); }
 .plus { color: var(--plus); } .minus { color: var(--minus); } .warn { color: var(--warn); } .gold { color: var(--gold); }
 table { width: 100%; border-collapse: collapse; font-size: 15px; }
-td, th { padding: 8px 4px; border-bottom: 1px solid var(--line); text-align: left; }
-th { font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; }
+td, th { padding: 10px 4px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: middle; }
+th { font-size: 11.5px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
 td.z, th.z { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-tr.ich td { background: color-mix(in srgb, var(--accent) 12%, transparent); font-weight: 600; }
+tr.ich td { background: color-mix(in srgb, var(--accent) 12%, transparent); font-weight: 700; }
 tr:last-child td { border-bottom: 0; }
-.rang { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 8px; background: var(--panel2); font-weight: 700; font-size: 13px; }
-.rang.r1 { background: #f2c94c; color: #3d2e00; } .rang.r2 { background: #cfd6e0; color: #263040; } .rang.r3 { background: #e0a46e; color: #3a1f05; }
-.knoepfe { display: flex; gap: 6px; flex-wrap: wrap; margin: 4px 0 10px; }
+.rang { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 9px; background: var(--panel2); font-weight: 800; font-size: 13px; }
+.rang.r1 { background: linear-gradient(135deg, #fde68a, #f59e0b); color: #3d2e00; } .rang.r2 { background: linear-gradient(135deg, #f1f5f9, #94a3b8); color: #1e293b; }
+.rang.r3 { background: linear-gradient(135deg, #fed7aa, #c2410c); color: #fff; }
+.knoepfe { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0 12px; }
 button.k, .knoepfe button { border: 1px solid var(--line); background: var(--panel2); color: var(--text); border-radius: 999px;
-  padding: 6px 12px; font: inherit; font-size: 14px; cursor: pointer; }
+  padding: 7px 14px; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; transition: transform .1s; }
+button.k:active, .knoepfe button:active, .aktion:active { transform: scale(.97); }
 .knoepfe button.aktiv { background: var(--accent); border-color: var(--accent); color: #fff; }
+.segment { display: flex; background: var(--panel2); border: 1px solid var(--line); border-radius: 14px; padding: 4px; margin-bottom: 12px; }
+.segment button { flex: 1; border: 0; background: none; color: var(--muted); font: inherit; font-weight: 700; font-size: 14px; padding: 8px; border-radius: 10px; cursor: pointer; }
+.segment button.aktiv { background: var(--panel); color: var(--text); box-shadow: var(--shadow); }
 .balken { height: 8px; border-radius: 99px; background: var(--panel2); overflow: hidden; margin-top: 6px; }
-.balken > i { display: block; height: 100%; background: var(--accent); border-radius: 99px; }
-.zeile { display: flex; justify-content: space-between; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line); }
+.balken > i { display: block; height: 100%; background: linear-gradient(90deg, var(--accent2), var(--accent)); border-radius: 99px; }
+.zeile { display: flex; justify-content: space-between; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); }
 .zeile:last-child { border-bottom: 0; }
 .zeile b { font-variant-numeric: tabular-nums; }
 svg.graf { width: 100%; height: auto; display: block; touch-action: pan-y; }
@@ -73,12 +89,25 @@ svg.graf text { fill: var(--muted); font-size: 11px; }
 .tip { font-size: 13px; color: var(--muted); min-height: 19px; margin-top: 4px; }
 .legende { display: flex; flex-wrap: wrap; gap: 10px; font-size: 13px; margin-top: 6px; }
 .legende span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; background: var(--f); }
-details summary { cursor: pointer; color: var(--muted); font-size: 14px; padding: 2px 0; }
+details summary { cursor: pointer; color: var(--muted); font-size: 14px; padding: 2px 0; font-weight: 600; }
 .leer { color: var(--muted); font-size: 14px; }
-.punkte { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 2px; margin-top: 6px; }
-.punkte i { height: 22px; border-radius: 3px; background: var(--panel2); }
-.punkte i.an { background: color-mix(in srgb, var(--accent) 70%, transparent); }
+.punkte { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 2px; margin-top: 8px; }
+.punkte i { height: 24px; border-radius: 4px; background: var(--panel2); }
+.punkte i.an { background: color-mix(in srgb, var(--accent) 75%, transparent); }
 .punkte i.aus { background: color-mix(in srgb, var(--minus) 35%, transparent); }
+.aktionen { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+.aktion { border: 1px solid var(--line); background: var(--panel); border-radius: var(--radius); padding: 16px; text-align: left; color: var(--text);
+  font: inherit; cursor: pointer; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 6px; min-height: 118px; transition: transform .1s; }
+.aktion .ico { width: 42px; height: 42px; border-radius: 13px; display: grid; place-items: center; font-size: 22px; background: var(--panel2); }
+.aktion b { font-size: 16px; } .aktion span { font-size: 12.5px; color: var(--muted); }
+.aktion.breit { grid-column: span 2; min-height: 0; flex-direction: row; align-items: center; gap: 14px;
+  background: linear-gradient(135deg, var(--accent2), color-mix(in srgb, var(--accent2) 55%, var(--gold))); color: #fff; border: 0; }
+.aktion.breit span { color: rgba(255,255,255,.85); } .aktion.breit .ico { background: rgba(255,255,255,.18); }
+.stepper { display: flex; align-items: center; gap: 8px; margin-top: 2px; }
+.stepper button { width: 30px; height: 30px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel2); color: var(--text); font: inherit; font-weight: 800; cursor: pointer; }
+.stepper output { min-width: 22px; text-align: center; font-weight: 800; }
+.toast { position: fixed; left: 50%; bottom: calc(96px + env(safe-area-inset-bottom)); transform: translateX(-50%); background: var(--text); color: var(--bg);
+  padding: 10px 16px; border-radius: 14px; font-size: 14px; font-weight: 600; z-index: 9; box-shadow: var(--shadow); max-width: 90vw; }
 </style>
 </head>
 <body>
@@ -93,13 +122,16 @@ details summary { cursor: pointer; color: var(--muted); font-size: 14px; padding
 const SEITEN = [
   ["start", "Start", "M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"],
   ["rang", "Rangliste", "M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0zM7 6H4a3 3 0 0 0 3 4M17 6h3a3 3 0 0 1-3 4"],
+  ["aktionen", "Aktionen", "M13 2L4 14h7l-1 8 9-12h-7z"],
   ["verlauf", "Verlauf", "M3 3v18h18M7 15l4-4 3 3 6-7"],
-  ["stats", "Statistik", "M5 20V10M12 20V4M19 20v-7"],
-  ["server", "Server", "M4 5h16v6H4zM4 13h16v6H4zM8 8h.01M8 16h.01"],
-  ["geschichte", "Geschichte", "M12 8v4l3 2M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5"]
+  ["mehr", "Mehr", "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"]
 ];
-let seite = "start", D = null, bereich = 24, gStart = null;
-try { seite = localStorage.getItem("ks-seite") || seite; bereich = +localStorage.getItem("ks-bereich") || 24; } catch (e) {}
+let seite = "start", unterseite = "stats", D = null, bereich = 24, totemMenge = 2;
+try {
+  seite = localStorage.getItem("ks-seite") || seite; unterseite = localStorage.getItem("ks-unter") || unterseite;
+  bereich = +localStorage.getItem("ks-bereich") || 24;
+} catch (e) {}
+if (!SEITEN.some(s => s[0] === seite)) seite = "start";
 
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -221,7 +253,8 @@ function start() {
       ${v1 && jetzt != null ? `<span class="chip">1 Std. ${delta(jetzt - v1.v)}</span>` : ""}
       ${v24 && jetzt != null ? `<span class="chip">24 Std. ${delta(jetzt - v24.v)}</span>` : ""}
       ${ps != null ? `<span class="chip">≈ ${delta(ps)} / Std.</span>` : ""}
-      ${rg ? `<span class="chip gold">Platz ${rg.platz}</span>` : ""}
+      ${rg ? `<span class="chip">🏆 Platz ${rg.platz}</span>` : ""}
+      ${D.inventar ? `<span class="chip">🗿 ${zahl(D.inventar.totem_of_undying || 0)} Totems</span>` : ""}
     </div>
     ${v.length > 1 ? diagramm("mini", [{ n: "Du", f: "var(--gold)", p: v.slice(-96), dick: 1 }], { h: 120, titel: "Kontostand" }) : ""}</div>`;
   if (rg) {
@@ -367,6 +400,77 @@ function geschichte() {
   return h;
 }
 
+// ------------------------------------------------------------------ Aktionen: Befehle verschlüsselt an den Bot (über einen geheimen ntfy-Kanal)
+const AKTIONEN = {
+  kaufen: ["🗿", "Totems kaufen", "Kauft Totems im /shop"],
+  totem: ["🛡️", "Totem ausrüsten", "Legt ein Totem in die zweite Hand"],
+  essen: ["🍗", "Essen", "Isst, bis er satt ist"],
+  einbauen: ["🧱", "Einbauen", "Baut Wände und Dach um sich"],
+  erkunden: ["🔍", "Shop ansehen", "Speichert das Shop-Fenster"]
+};
+const b64url = a => btoa(String.fromCharCode(...a)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+async function kanal() {
+  const h = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode("befehle:" + schluessel())));
+  return "mcs-" + [...h].map(x => x.toString(16).padStart(2, "0")).join("").slice(0, 24);
+}
+async function sende(befehl, anzahl = 1) {
+  const key = await crypto.subtle.importKey("raw", b64(schluessel()), "AES-GCM", false, ["encrypt"]);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const klar = new TextEncoder().encode(JSON.stringify({ befehl, anzahl, zeit: new Date().toISOString() }));
+  const geheim = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, klar));
+  const alles = new Uint8Array(12 + geheim.length); alles.set(iv); alles.set(geheim, 12);
+  const r = await fetch("https://ntfy.sh/" + await kanal(), { method: "POST", body: b64url(alles) });
+  if (!r.ok) throw new Error("Senden fehlgeschlagen (" + r.status + ")");
+  const g = gesendet(); g.push({ befehl, anzahl, zeit: new Date().toISOString() });
+  try { localStorage.setItem("ks-gesendet", JSON.stringify(g.slice(-20))); } catch (e) {}
+}
+function gesendet() { try { return JSON.parse(localStorage.getItem("ks-gesendet")) || []; } catch (e) { return []; } }
+function toast(t) {
+  const el = document.createElement("div"); el.className = "toast"; el.textContent = t; document.body.appendChild(el);
+  setTimeout(() => el.remove(), 3500);
+}
+async function ausloesen(liste) {
+  try {
+    for (const [b, n] of liste) await sende(b, n);
+    const l = D.letzterLauf || {}, naechster = l.zeit ? new Date(+new Date(l.zeit) + 15 * 60e3) : null;
+    toast("Gesendet ✓ Der Bot macht es beim nächsten Check" + (naechster && naechster > Date.now() ? " (etwa " + uhr(naechster) + " Uhr)" : ""));
+    zeichne();
+  } catch (e) { toast("⚠ " + e.message); }
+}
+function aktionen() {
+  const inv = D.inventar || {}, auftr = (D.auftraege || []).slice().reverse();
+  const unterwegs = gesendet().filter(g => !auftr.some(a => a.art === g.befehl && new Date(a.zeit) >= new Date(g.zeit)) && Date.now() - new Date(g.zeit) < 3 * 3600e3);
+  const essenZahl = Object.entries(inv).filter(([k]) => /cooked|bread|baked_potato|carrot|apple|pie|stew|melon|berries/.test(k) && !/golden_apple/.test(k)).reduce((s, [, v]) => s + v, 0);
+  const steine = Object.entries(inv).filter(([k]) => /cobble|stone|dirt|deepslate|netherrack|planks|andesite|diorite|granite|tuff|bricks|_log$|sand$|gravel|glass|wool/.test(k)).reduce((s, [, v]) => s + v, 0);
+  const zweite = (D.letzterLauf || {}).zweiteHand || (D.letzterErfolg || {}).zweiteHand;
+  const gefahr = (D.letzterLauf || {}).gefahrInDerNaehe || [];
+  let h = `<div class="aktionen">
+    <button class="aktion breit" data-alles><div class="ico">⚡</div><div><b>Alles absichern</b><br><span>${totemMenge} Totems kaufen, ausrüsten, essen und einbauen</span></div></button>
+    <div class="aktion"><div class="ico">${AKTIONEN.kaufen[0]}</div><b>${AKTIONEN.kaufen[1]}</b>
+      <div class="stepper"><button data-m="-1" aria-label="weniger">−</button><output>${totemMenge}</output><button data-m="1" aria-label="mehr">+</button></div>
+      <button class="k" data-a="kaufen" style="margin-top:4px">Kaufen</button></div>
+    ${["totem", "essen", "einbauen"].map(a => `<button class="aktion" data-a="${a}"><div class="ico">${AKTIONEN[a][0]}</div><b>${AKTIONEN[a][1]}</b><span>${AKTIONEN[a][2]}</span></button>`).join("")}
+  </div>`;
+  h += `<div class="raster">
+    <div class="karte"><div class="t">Totems</div><div class="mittel">🗿 ${zahl(inv.totem_of_undying || 0)}</div><div class="klein">${zweite === "totem_of_undying" ? "eins in der zweiten Hand ✓" : "keins in der zweiten Hand"}</div></div>
+    <div class="karte"><div class="t">Essen</div><div class="mittel">🍗 ${zahl(essenZahl)}</div><div class="klein">Hunger ${D.letzterErfolg?.essen != null ? zahl(D.letzterErfolg.essen / 2, 1) + " / 10" : "?"}</div></div>
+    <div class="karte"><div class="t">Bausteine</div><div class="mittel">🧱 ${zahl(steine)}</div><div class="klein">zum Einbauen (10 nötig)</div></div>
+    <div class="karte"><div class="t">Umgebung</div><div class="mittel" style="font-size:17px">${gefahr.length ? "⚠ " + gefahr.length + " Monster" : "✓ ruhig"}</div><div class="klein">${esc(gefahr.slice(0, 3).join(", "))}</div></div></div>`;
+  if (!D.inventar) h += `<div class="karte klein">Inventar und Umgebung erscheinen nach dem nächsten Check, wenn der Server an ist.</div>`;
+  if (unterwegs.length) h += `<div class="karte"><div class="t">Unterwegs zum Bot</div>${unterwegs.map(g => `<div class="zeile"><span>${AKTIONEN[g.befehl]?.[0] || ""} ${AKTIONEN[g.befehl]?.[1] || g.befehl}${g.befehl === "kaufen" ? " (" + g.anzahl + ")" : ""}</span><span class="klein">${vor(g.zeit)}</span></div>`).join("")}
+    <div class="klein" style="margin-top:6px">Wird beim nächsten Check ausgeführt, sobald der Server an ist.</div></div>`;
+  h += `<div class="karte"><div class="t">Vom Bot erledigt</div>${auftr.length ? auftr.slice(0, 12).map(a => `<div class="zeile"><span>${AKTIONEN[a.art]?.[0] || ""} ${AKTIONEN[a.art]?.[1] || a.art}<div class="klein">${esc(a.ergebnis || (a.status === "offen" ? "wartet, bis der Server an ist" : ""))}</div></span>
+      <span><span class="chip ${a.status === "erledigt" ? "gut" : a.status === "fehler" ? "schlecht" : "warn"}">${a.status}</span></span></div>`).join("") : `<div class="leer">Noch nichts.</div>`}</div>`;
+  h += `<div class="karte klein">🛡️ Sicherheit: Bekommt der Bot Schaden, geht er sofort raus, wartet kurz und kommt höchstens zweimal wieder, nie mit weniger als 3 Herzen. Bist du selbst online, joint er nicht.</div>`;
+  if (D.shopFenster) h += `<div class="karte"><details><summary>Shop-Fenster (zur Kontrolle)</summary>${D.shopFenster.map(f => `<p><b>${esc(f.titel)}</b><br>${f.items.map(i => `<span class="chip">${esc(i.name || i.item)}</span>`).join(" ")}</p>`).join("")}</details></div>`;
+  return h;
+}
+function mehr() {
+  const teile = [["stats", "Statistik"], ["server", "Server"], ["geschichte", "Geschichte"]];
+  return `<div class="segment">${teile.map(([id, n]) => `<button data-u="${id}" class="${id === unterseite ? "aktiv" : ""}">${n}</button>`).join("")}</div>` +
+    ({ stats, server, geschichte }[unterseite] || stats)();
+}
+
 // ------------------------------------------------------------------ Rahmen
 function nav() {
   $("#nav").innerHTML = SEITEN.map(([id, n, d]) => `<button data-s="${id}" class="${id === seite ? "aktiv" : ""}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="${d}"/></svg>${n}</button>`).join("");
@@ -376,10 +480,15 @@ function zeichne() {
   if (!D) return;
   const l = D.letzterLauf || {}, [st, cls] = STATUS[l.status] || [l.status || "?", ""];
   $("#status").innerHTML = `Check ${vor(l.zeit)} · <span class="${cls === "gut" ? "plus" : cls === "schlecht" ? "minus" : "warn"}">${st}</span>`;
-  const f = { start, rang, verlauf: verlaufSeite, stats, server, geschichte }[seite] || start;
+  const f = { start, rang, aktionen, verlauf: verlaufSeite, mehr }[seite] || start;
   $("#inhalt").innerHTML = f();
   ["mini", "rennen", "haupt"].forEach(antippbar);
   document.querySelectorAll("[data-b]").forEach(b => b.onclick = () => { bereich = +b.dataset.b; try { localStorage.setItem("ks-bereich", bereich); } catch (e) {} zeichne(); });
+  document.querySelectorAll("[data-u]").forEach(b => b.onclick = () => { unterseite = b.dataset.u; try { localStorage.setItem("ks-unter", unterseite); } catch (e) {} zeichne(); });
+  document.querySelectorAll("[data-m]").forEach(b => b.onclick = () => { totemMenge = Math.max(1, Math.min(16, totemMenge + +b.dataset.m)); zeichne(); });
+  document.querySelectorAll("[data-a]").forEach(b => b.onclick = () => ausloesen([[b.dataset.a, b.dataset.a === "kaufen" ? totemMenge : 1]]));
+  const alles = document.querySelector("[data-alles]");
+  if (alles) alles.onclick = () => ausloesen([["kaufen", totemMenge], ["totem", 1], ["essen", 1], ["einbauen", 1]]);
 }
 $("#neu").onclick = laden;
 nav();

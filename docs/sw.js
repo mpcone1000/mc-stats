@@ -1,5 +1,5 @@
 // Haelt die Seite offline verfuegbar; Daten werden immer frisch geholt (Fallback: letzter Stand in der App).
-const CACHE = "mcstats-v1";
+const CACHE = "mcstats-v2";
 self.addEventListener("install", e => e.waitUntil(caches.open(CACHE).then(c => c.addAll(["./", "index.html", "manifest.json", "icon-192.png"])).then(() => self.skipWaiting())));
 self.addEventListener("activate", e => e.waitUntil(self.clients.claim()));
 self.addEventListener("fetch", e => {
