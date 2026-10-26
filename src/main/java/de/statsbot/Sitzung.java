@@ -103,7 +103,6 @@ final class Sitzung {
 
     private static final Pattern GEKAUFT = Pattern.compile("^\\[Shop\\] Gekauft: (\\d+)x? (.+?) f(?:ü|ue)r");
     private static final Pattern POST = Pattern.compile("(?i)you have (\\d+) (?:new )?(?:messages?|mails?)");
-    private static final Pattern KATEGORIE = Pattern.compile("(?i)kampf|combat|waffe|rüstung|ruestung|verschied|sonstig|misc|spezial|special|selten|rare|magie|totem|alles|items");
 
     private final String host;
     private final int port;
@@ -475,47 +474,85 @@ final class Sitzung {
         }
     }
 
-    /** Oeffnet /shop, sucht das Totem (notfalls ueber eine passende Kategorie) und kauft es. */
+    /**
+     * Oeffnet /shop und kauft Totems. Sicher gegen Fehlkaeufe: Kategorien werden nur im Hauptmenue angeklickt,
+     * auf Unterseiten nur das Totem selbst oder "naechste Seite". Jeder Kauf wird geprueft (Chat oder Inventar);
+     * ohne Bestaetigung hoert der Bot sofort auf.
+     */
     private String totemsKaufen(int menge) throws InterruptedException {
         int totem = Items.id(Items.TOTEM);
         int vorher = anzahl(totem);
-        int gekauft = 0;
-        for (int versuch = 0; versuch < menge + 3 && gekauft < menge && aktiv; versuch++) {
-            if (fensterId < 0 || fenster == null) {
-                befehl("shop");
-                for (int i = 0; i < 40 && fenster == null; i++) schlafe(50);
-                if (fenster == null) return gekauft > 0 ? gekauft + " gekauft, Shop ging nicht mehr auf" : "Shop-Fenster ging nicht auf";
-            }
-            int slot = suche(fenster, totem);
+        int gekauft = 0, ebene = 0, seiten = 0;
+        if (!oeffneShop()) return "Shop-Fenster ging nicht auf, nichts gekauft";
+        for (int versuch = 0; versuch < menge + 6 && gekauft < menge && aktiv; versuch++) {
+            ItemStack[] f = fenster;
+            if (f == null) return ende(gekauft, totem, vorher, "Shop wurde geschlossen");
+            int slot = suche(f, totem);
             if (slot < 0) {
-                int kat = kategorie(fenster);
-                if (kat < 0) return gekauft > 0 ? gekauft + " gekauft" : "Totem im Shop nicht gefunden (Fenster: " + fensterTitel + ")";
-                ItemStack[] alt = fenster;
-                klick(fensterId, fensterState, kat, ContainerActionType.CLICK_ITEM, ClickItemAction.LEFT_CLICK);
-                for (int i = 0; i < 30 && fenster == alt; i++) schlafe(50);
-                schlafe(200);
+                int ziel = ebene == 0 ? kategorie(f) : (seiten < 3 ? weiterKnopf(f) : -1);
+                if (ziel < 0) return ende(gekauft, totem, vorher, "Totem im Shop nicht gefunden");
+                if (!wechsle(ziel)) return ende(gekauft, totem, vorher, "Shop-Seite ging nicht auf");
+                if (ebene == 0) ebene = 1; else seiten++;
                 continue;
             }
             int zeilenVorher = zeilen.size();
+            int imFenster = totemsUnten(f, totem);
             klick(fensterId, fensterState, slot, ContainerActionType.CLICK_ITEM, ClickItemAction.LEFT_CLICK);
-            schlafe(700);
-            for (String z : zeilen.subList(zeilenVorher, zeilen.size())) {
+            schlafe(800);
+            int neu = 0;
+            for (String z : zeilen.subList(Math.min(zeilenVorher, zeilen.size()), zeilen.size())) {
                 Matcher m = GEKAUFT.matcher(z);
-                if (m.find() && m.group(2).contains("totem")) gekauft += Integer.parseInt(m.group(1));
-                if (z.contains("fehlt dir Geld")) {
-                    schliesse();
-                    return gekauft > 0 ? gekauft + " gekauft, dann war das Geld alle" : "Nicht genug Geld";
-                }
-                if (z.contains("nicht genug Platz")) {
-                    schliesse();
-                    return gekauft > 0 ? gekauft + " gekauft, dann war das Inventar voll" : "Inventar voll";
-                }
+                if (m.find() && m.group(2).toLowerCase().contains("totem")) neu += Integer.parseInt(m.group(1));
+                if (z.contains("fehlt dir Geld")) return ende(gekauft, totem, vorher, "Nicht genug Geld");
+                if (z.contains("nicht genug Platz")) return ende(gekauft, totem, vorher, "Inventar voll");
             }
+            ItemStack[] danach = fenster;
+            if (neu == 0 && danach != null) neu = Math.max(0, totemsUnten(danach, totem) - imFenster);
+            // Kein bestaetigter Kauf (z. B. ein unbekanntes Bestaetigungs-Fenster): lieber sofort aufhoeren
+            if (neu == 0) return ende(gekauft, totem, vorher, "Kauf nicht bestaetigt (Fenster: " + fensterTitel + ")");
+            gekauft += neu;
         }
+        return ende(gekauft, totem, vorher, null);
+    }
+
+    private String ende(int gekauft, int totem, int vorher, String grund) throws InterruptedException {
         schliesse();
         schlafe(300);
-        int jetzt = anzahl(totem);
-        return (gekauft > 0 ? gekauft : Math.max(0, jetzt - vorher)) + " Totem(s) gekauft, jetzt " + jetzt + " im Inventar";
+        String teil = gekauft > 0 ? gekauft + " Totem(s) gekauft" : "Nichts gekauft";
+        return teil + (grund != null ? " (" + grund + ")" : "");
+    }
+
+    private boolean oeffneShop() throws InterruptedException {
+        schliesse();
+        befehl("shop");
+        for (int i = 0; i < 40 && fenster == null; i++) schlafe(50);
+        schlafe(300);
+        return fenster != null;
+    }
+
+    /** Klickt eine Kategorie oder "naechste Seite" und wartet auf den neuen Inhalt. */
+    private boolean wechsle(int slot) throws InterruptedException {
+        ItemStack[] alt = fenster;
+        String vorher = inhalt(alt);
+        klick(fensterId, fensterState, slot, ContainerActionType.CLICK_ITEM, ClickItemAction.LEFT_CLICK);
+        for (int i = 0; i < 40 && (fenster == null || inhalt(fenster).equals(vorher)); i++) schlafe(50);
+        schlafe(250);
+        return fenster != null && !inhalt(fenster).equals(vorher);
+    }
+
+    /** Kurzer Fingerabdruck der oberen Slots, um einen echten Seitenwechsel zu erkennen. */
+    private static String inhalt(ItemStack[] f) {
+        if (f == null) return "";
+        StringBuilder b = new StringBuilder();
+        for (int i = 0; i < oben(f); i++) b.append(f[i] == null ? "-" : f[i].getId()).append(',');
+        return b.toString();
+    }
+
+    /** Totems im eigenen Inventar-Teil des offenen Fensters (unten). */
+    private static int totemsUnten(ItemStack[] f, int totem) {
+        int n = 0;
+        for (int i = oben(f); i < f.length; i++) if (f[i] != null && f[i].getId() == totem) n += f[i].getAmount();
+        return n;
     }
 
     private void schliesse() {
@@ -534,11 +571,30 @@ final class Sitzung {
         return -1;
     }
 
+    /** Beste Kategorie im Hauptmenue: Totem, dann Kampf/Waffen, dann Ausruestung, dann Sonstiges. -1 = keine. */
     private static int kategorie(ItemStack[] f) {
+        int beste = -1, rang = 99;
         for (int i = 0; i < oben(f); i++) {
             if (f[i] == null) continue;
-            String n = anzeigeName(f[i]) + " " + Items.name(f[i].getId());
-            if (KATEGORIE.matcher(n).find()) return i;
+            String n = (anzeigeName(f[i]) + " " + Items.name(f[i].getId())).toLowerCase();
+            int r = n.contains("totem") ? 0
+                : n.matches("(?s).*(kampf|combat|waffe).*") ? 1
+                : n.matches("(?s).*(ausrüstung|ausruestung|rüstung|ruestung|equipment|gear).*") ? 2
+                : n.matches("(?s).*(verschied|sonstig|misc|spezial|special|selten|rare|magie).*") ? 3 : 99;
+            if (r < rang) {
+                rang = r;
+                beste = i;
+            }
+        }
+        return beste;
+    }
+
+    /** Knopf fuer die naechste Seite auf einer Shop-Unterseite. -1 = keiner. */
+    private static int weiterKnopf(ItemStack[] f) {
+        for (int i = 0; i < oben(f); i++) {
+            if (f[i] == null) continue;
+            String n = anzeigeName(f[i]).toLowerCase();
+            if (n.matches("(?s).*(weiter|nächste|naechste|next|seite \\d|→|»).*")) return i;
         }
         return -1;
     }
@@ -553,13 +609,21 @@ final class Sitzung {
         return "";
     }
 
+    /** Shop ansehen (nur anschauen, nichts kaufen): Hauptmenue und die Kategorie, in der das Totem sein muesste. */
     private String erkunden() throws InterruptedException {
-        befehl("shop");
-        for (int i = 0; i < 40 && fenster == null; i++) schlafe(50);
-        schlafe(500);
-        String t = fenster == null ? "Shop ging nicht auf" : "Shop-Fenster gespeichert: " + fensterTitel;
+        if (!oeffneShop()) return "Shop ging nicht auf";
+        String haupt = fensterTitel;
+        String mehr = "";
+        int kat = kategorie(fenster);
+        if (kat >= 0) {
+            String name = anzeigeName(fenster[kat]);
+            if (wechsle(kat)) {
+                int t = suche(fenster, Items.id(Items.TOTEM));
+                mehr = ", in \"" + name + "\" " + (t >= 0 ? "liegt ein Totem" : "kein Totem auf der ersten Seite");
+            }
+        }
         schliesse();
-        return t;
+        return "Shop gespeichert: " + haupt + mehr;
     }
 
     /** Teleport-Befehl wie /home; wartet auf die neue Position (Essentials hat oft 3 Sekunden Wartezeit). */
