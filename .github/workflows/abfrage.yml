@@ -57,7 +57,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      # Immer der neueste Stand (nicht der vom Moment der Einplanung), damit Reparaturen sofort greifen
       - uses: actions/checkout@v4
+        with:
+          ref: main
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
