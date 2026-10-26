@@ -1,7 +1,10 @@
 name: Abfrage
-# Takt: Jeder Lauf plant am Ende den naechsten ein. Der wartet in der Umgebung "takt"
-# (13 Minuten Wartezeit, kostet keine Rechenzeit) und fragt dann ab. So kommt der Bot
-# zuverlaessig alle ~15 Minuten vorbei, auch wenn der GitHub-Zeitplan hakt.
+# Takt: Jeder Lauf plant den naechsten ein. Der wartet 3 Minuten in der Umgebung "takt"
+# (kostet keine Rechenzeit) und schaut dann nur kurz nach:
+#  - Hat jemand in der App "Jetzt messen" gedrueckt?  -> sofort auf den Server
+#  - Ist der letzte Besuch schon ~13 Minuten her?      -> normaler Besuch
+#  - sonst                                              -> gleich wieder 3 Minuten warten
+# So kommt der Bot zuverlaessig alle ~15 Minuten und auf Wunsch nach wenigen Minuten.
 # Der Zeitplan unten bleibt als Reserve, falls die Kette einmal abreisst.
 # Anhalten: Repository-Variable TAKT auf "aus" setzen.
 on:
@@ -21,14 +24,36 @@ concurrency:
   cancel-in-progress: false
 jobs:
   takt:
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.warten }}
     runs-on: ubuntu-latest
-    environment: takt
+    # "takt" hat 3 Minuten Wartezeit, "sofort" keine (fuer Starts von Hand oder per Zeitplan)
+    environment: ${{ (github.event_name == 'workflow_dispatch' && inputs.warten) && 'takt' || 'sofort' }}
+    timeout-minutes: 3
+    outputs:
+      los: ${{ steps.pruefe.outputs.los }}
     steps:
-      - run: echo "Wartezeit vorbei"
+      - name: Besuch noetig?
+        id: pruefe
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KS_DATEN_SCHLUESSEL: ${{ secrets.KS_DATEN_SCHLUESSEL }}
+          WARTEN: ${{ github.event_name == 'workflow_dispatch' && inputs.warten }}
+        run: |
+          if [ "$WARTEN" != "true" ]; then echo "los=1" >> "$GITHUB_OUTPUT"; echo "Direkt gestartet"; exit 0; fi
+          letzte=$(gh api "repos/$GITHUB_REPOSITORY/commits?path=docs/daten.enc&per_page=1" --jq '.[0].commit.committer.date')
+          seit=$(date -d "$letzte" +%s)
+          alter=$(( $(date +%s) - seit ))
+          kanal="mcs-$(printf 'befehle:%s' "$KS_DATEN_SCHLUESSEL" | sha256sum | cut -c1-24)-jetzt"
+          wunsch=$(curl -s --max-time 10 "https://ntfy.sh/$kanal/json?poll=1&since=$seit" | grep -c '"event":"message"' || true)
+          echo "Letzter Besuch vor $alter Sekunden, Wuensche aus der App: $wunsch"
+          if [ "${wunsch:-0}" -gt 0 ] || [ "$alter" -ge 750 ]; then echo "los=1" >> "$GITHUB_OUTPUT"; fi
+      - name: Weiter warten
+        if: ${{ !cancelled() && steps.pruefe.outputs.los != '1' && vars.TAKT != 'aus' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run abfrage.yml -R "$GITHUB_REPOSITORY" --ref main -f warten=true
   abfrage:
     needs: takt
-    if: ${{ !cancelled() && needs.takt.result != 'failure' }}
+    if: ${{ !cancelled() && needs.takt.outputs.los == '1' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -53,7 +78,7 @@ jobs:
             git commit -q -m "Daten aktualisiert"
             git pull -q --rebase && git push -q
           fi
-      - name: Naechsten Besuch einplanen
+      - name: Naechsten Takt einplanen
         if: ${{ !cancelled() && vars.TAKT != 'aus' }}
         env:
           GH_TOKEN: ${{ github.token }}
