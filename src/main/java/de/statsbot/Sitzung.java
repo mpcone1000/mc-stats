@@ -28,7 +28,11 @@ import org.geysermc.mcprotocollib.protocol.data.game.item.ItemStack;
 import org.geysermc.mcprotocollib.protocol.data.game.item.component.DataComponentTypes;
 import org.geysermc.mcprotocollib.protocol.data.game.item.component.DataComponents;
 import org.geysermc.mcprotocollib.protocol.data.game.entity.metadata.GlobalPos;
+import org.geysermc.mcprotocollib.protocol.data.game.level.block.BlockChangeEntry;
+import org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound.level.ClientboundBlockUpdatePacket;
+import org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound.level.ClientboundSectionBlocksUpdatePacket;
 import org.geysermc.mcprotocollib.protocol.data.game.entity.player.PlayerSpawnInfo;
+import org.geysermc.mcprotocollib.protocol.data.game.entity.player.PositionElement;
 import org.geysermc.mcprotocollib.protocol.data.game.level.notify.ThunderStrengthValue;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound.ClientboundAwardStatsPacket;
 import org.geysermc.mcprotocollib.protocol.packet.ingame.clientbound.ClientboundChangeDifficultyPacket;
@@ -104,7 +108,10 @@ final class Sitzung {
     private final String host;
     private final int port;
     private final MinecraftProfile profil;
+    private final String name;
     private final String token;
+    /** Bloecke, die der Server gemeldet hat (Position -> Blockzustand, 0 = Luft); zum Pruefen beim Einbauen. */
+    private final Map<Vector3i, Integer> bloecke = new ConcurrentHashMap<>();
     private final List<Auftrag> auftraege;
     private final JsonObject lauf;
 
@@ -139,7 +146,19 @@ final class Sitzung {
         this.host = host;
         this.port = port;
         this.profil = profil;
+        this.name = profil.getName();
         this.token = token;
+        this.auftraege = auftraege;
+        this.lauf = lauf;
+    }
+
+    /** Nur zum Testen auf einem eigenen Server ohne Anmeldung (online-mode=false). Auf echten Servern geht das nicht. */
+    Sitzung(String host, int port, String testName, List<Auftrag> auftraege, JsonObject lauf) {
+        this.host = host;
+        this.port = port;
+        this.profil = null;
+        this.name = testName;
+        this.token = null;
         this.auftraege = auftraege;
         this.lauf = lauf;
     }
@@ -156,9 +175,9 @@ final class Sitzung {
         CountDownLatch getrennt = new CountDownLatch(1);
         c = ClientNetworkSessionFactory.factory()
             .setRemoteSocketAddress(new InetSocketAddress(host, port))
-            .setProtocol(new MinecraftProtocol(new GameProfile(profil.getId(), profil.getName()), token))
+            .setProtocol(profil == null ? new MinecraftProtocol(name) : new MinecraftProtocol(new GameProfile(profil.getId(), profil.getName()), token))
             .create();
-        c.setFlag(MinecraftConstants.SESSION_SERVICE_KEY, new SessionService());
+        if (profil != null) c.setFlag(MinecraftConstants.SESSION_SERVICE_KEY, new SessionService());
         c.addListener(new SessionAdapter() {
             @Override
             public void packetReceived(Session s, Packet p) {
@@ -210,10 +229,22 @@ final class Sitzung {
 
     private void empfange(Packet p) {
         if (p instanceof ClientboundPlayerPositionPacket pp) {
-            c.send(new ServerboundAcceptTeleportationPacket(pp.getId(), 0, 0, 0, 0, 0));
-            pos = new double[]{pp.getPosition().getX(), pp.getPosition().getY(), pp.getPosition().getZ()};
-            yaw = pp.getYRot();
-            pitch = pp.getXRot();
+            // Neue Position (Werte koennen relativ zur alten sein); seit Minecraft 26 muss die Bestaetigung
+            // die Position mitschicken, sonst haelt der Server den Spieler fuer zu schnell und setzt ihn dauernd zurueck
+            double[] alt = pos;
+            var rel = pp.getRelatives();
+            double x = pp.getPosition().getX(), y = pp.getPosition().getY(), z = pp.getPosition().getZ();
+            if (alt != null) {
+                if (rel.contains(PositionElement.X)) x += alt[0];
+                if (rel.contains(PositionElement.Y)) y += alt[1];
+                if (rel.contains(PositionElement.Z)) z += alt[2];
+            }
+            float yr = pp.getYRot() + (rel.contains(PositionElement.Y_ROT) ? yaw : 0);
+            float xr = pp.getXRot() + (rel.contains(PositionElement.X_ROT) ? pitch : 0);
+            pos = new double[]{x, y, z};
+            yaw = yr;
+            pitch = xr;
+            c.send(new ServerboundAcceptTeleportationPacket(pp.getId(), x, y, z, yr, xr));
         } else if (p instanceof ClientboundLoginPacket l) {
             entityId = l.getEntityId();
             welt(l.getCommonPlayerSpawnInfo());
@@ -289,6 +320,10 @@ final class Sitzung {
             fensterId = os.getContainerId();
             fensterTitel = Main.text(os.getTitle());
             fenster = null;
+        } else if (p instanceof ClientboundBlockUpdatePacket bu) {
+            bloecke.put(bu.getEntry().getPosition(), bu.getEntry().getBlock());
+        } else if (p instanceof ClientboundSectionBlocksUpdatePacket su) {
+            for (BlockChangeEntry e : su.getEntries()) bloecke.put(e.getPosition(), e.getBlock());
         } else if (p instanceof ClientboundContainerClosePacket) {
             fensterId = -1;
             fenster = null;
@@ -532,11 +567,23 @@ final class Sitzung {
         double[] vorher = pos;
         int z0 = zeilen.size();
         befehl(befehl);
-        for (int i = 0; i < 140 && pos == vorher; i++) schlafe(50);
+        // Nur ein echter Ortswechsel zaehlt (kleine Korrekturen vom Server nicht); bei "unbekannter Befehl" sofort aufhoeren
+        for (int i = 0; i < 140 && !weg(vorher); i++) {
+            schlafe(50);
+            if (zeilen.subList(Math.min(z0, zeilen.size()), zeilen.size()).stream().anyMatch(z -> z.toLowerCase().matches(".*(unknown|unbekannt|incomplete|no permission|keine berechtigung).*"))) break;
+        }
         schlafe(400);
         List<String> antwort = new ArrayList<>(zeilen.subList(Math.min(z0, zeilen.size()), zeilen.size()));
-        if (pos != vorher) return "Teleportiert " + ziel;
-        return antwort.isEmpty() ? "Keine Antwort vom Server" : "Server: " + antwort.get(antwort.size() - 1);
+        if (weg(vorher)) return "Teleportiert " + ziel;
+        return antwort.isEmpty() ? "Keine Antwort vom Server" : "Ging nicht. Server: " + antwort.get(antwort.size() - 1);
+    }
+
+    /** Mehr als 2 Bloecke von der alten Position entfernt? */
+    private boolean weg(double[] vorher) {
+        double[] jetzt = pos;
+        if (vorher == null || jetzt == null) return false;
+        double dx = jetzt[0] - vorher[0], dy = jetzt[1] - vorher[1], dz = jetzt[2] - vorher[2];
+        return dx * dx + dy * dy + dz * dz > 4;
     }
 
     /** Ein Ausruestungsteil mit Haltbarkeit in Prozent (fuer die App). */
@@ -593,14 +640,38 @@ final class Sitzung {
         inDieHand(slot);
         int x = (int) Math.floor(pos[0]), y = (int) Math.floor(pos[1]), z = (int) Math.floor(pos[2]);
         int[][] seiten = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
-        int gesetzt = 0;
+        // Jeder Klick setzt den neuen Block auf die angeklickte Seite; "ziele" sind die Stellen, wo Bloecke entstehen sollen
+        List<Vector3i> ziele = new ArrayList<>();
         for (int[] s : seiten) {
-            gesetzt += setze(Vector3i.from(x + s[0], y - 1, z + s[1]), Direction.UP) ? 1 : 0;
-            gesetzt += setze(Vector3i.from(x + s[0], y, z + s[1]), Direction.UP) ? 1 : 0;
+            setze(Vector3i.from(x + s[0], y - 1, z + s[1]), Direction.UP);
+            ziele.add(Vector3i.from(x + s[0], y, z + s[1]));
+            setze(Vector3i.from(x + s[0], y, z + s[1]), Direction.UP);
+            ziele.add(Vector3i.from(x + s[0], y + 1, z + s[1]));
         }
-        gesetzt += setze(Vector3i.from(x + 1, y + 1, z), Direction.UP) ? 1 : 0;
-        gesetzt += setze(Vector3i.from(x + 1, y + 2, z), Direction.WEST) ? 1 : 0;
-        return "Eingebaut mit " + stein + " (" + gesetzt + " Bloecke versucht, besetzte Stellen bleiben wie sie sind)";
+        // Dach: erst ein Hilfsblock schraeg oben, dann an dessen Seite der Block direkt ueber dem Kopf.
+        // Kurz warten, bis der Hilfsblock beim Server steht (sonst klappt das Dach manchmal nicht), notfalls zweiter Versuch.
+        Vector3i hilfe = Vector3i.from(x + 1, y + 2, z), dach = Vector3i.from(x, y + 2, z);
+        setze(Vector3i.from(x + 1, y + 1, z), Direction.UP);
+        ziele.add(hilfe);
+        schlafe(500);
+        setze(hilfe, Direction.WEST);
+        ziele.add(dach);
+        schlafe(700);
+        if (!zu(dach)) {
+            setze(hilfe, Direction.WEST);
+            schlafe(700);
+        }
+        // Der Server meldet nach jedem Klick, was an der Stelle steht: so sieht man, welche Plaetze wirklich zu sind
+        long dicht = ziele.stream().filter(this::zu).count();
+        if (dicht == 0) return "Konnte nicht einbauen (kein Boden daneben oder keine Antwort vom Server)";
+        return (dicht == 10 ? "Eingebaut: alle 10 Plaetze sind zu" : dicht + " von 10 Plaetzen sind zu") + " (mit " + stein + ")"
+            + (zu(dach) ? ", Dach ist drauf" : ", ohne Dach");
+    }
+
+    /** Steht an der Stelle laut Server ein Block (keine Luft)? */
+    private boolean zu(Vector3i q) {
+        Integer b = bloecke.get(q);
+        return b != null && b != 0;
     }
 
     /** Klickt mit dem Block in der Hand auf eine Seite des Blocks bei p (der neue Block entsteht daneben). */
@@ -692,7 +763,7 @@ final class Sitzung {
             lauf.add("topgeld", t);
         }
         JsonArray sp = new JsonArray();
-        synchronized (spieler) { spieler.stream().filter(n -> !n.equalsIgnoreCase(profil.getName())).forEach(sp::add); }
+        synchronized (spieler) { spieler.stream().filter(n -> !n.equalsIgnoreCase(name)).forEach(sp::add); }
         if (!sp.isEmpty()) lauf.add("online", sp);
         // Monster in der Naehe merken (nur Info fuer die App)
         if (pos != null) {
@@ -708,7 +779,7 @@ final class Sitzung {
                 if (!"PLAYER".equals(w[0]) || w.length < 5) continue;
                 double dx = (double) w[1] - pos[0], dy = (double) w[2] - pos[1], dz = (double) w[3] - pos[2];
                 String n = namen.getOrDefault((UUID) w[4], "Jemand");
-                if (!n.equalsIgnoreCase(profil.getName())) nah.add(n + " " + Math.round(Math.sqrt(dx * dx + dy * dy + dz * dz)) + "m");
+                if (!n.equalsIgnoreCase(name)) nah.add(n + " " + Math.round(Math.sqrt(dx * dx + dy * dy + dz * dz)) + "m");
             }
             if (!nah.isEmpty()) lauf.add("spielerNah", nah);
         }

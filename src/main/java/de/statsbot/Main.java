@@ -145,6 +145,19 @@ public class Main {
                 // Zum Pruefen: welche Befehle liegen im Kanal und lassen sich entschluesseln?
                 for (Befehle.Befehl b : Befehle.abholen(schluessel("KS_DATEN_SCHLUESSEL"), "12h")) System.out.println(b);
             }
+            case "testlauf" -> {
+                // Nur fuer einen eigenen Test-Server (online-mode=false): testlauf <host> <port> <name> [auftrag ...]
+                List<Sitzung.Auftrag> liste = new ArrayList<>();
+                for (int i = 4; i < args.length; i++) liste.add(new Sitzung.Auftrag("test" + i, args[i], args[i].equals("kaufen") ? 2 : 1));
+                JsonObject l = new JsonObject();
+                Sitzung s = new Sitzung(args[1], Integer.parseInt(args[2]), args[3], liste, l);
+                Sitzung.Ende e = s.laufe();
+                System.out.println("ENDE: " + e + (s.grund() != null ? " (" + s.grund() + ")" : ""));
+                for (Sitzung.Auftrag a : liste) System.out.println("AUFTRAG " + a.art + ": " + a.status + " -> " + a.ergebnis);
+                l.remove("nachrichten");
+                l.remove("statistiken");
+                System.out.println(new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create().toJson(l));
+            }
             case "befehle-pruefen" -> {
                 // Trockenlauf ohne Server und ohne Speichern: wie wuerde der Bot die Befehle der letzten 12 Stunden verarbeiten?
                 DATEN = new JsonObject();
