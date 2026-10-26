@@ -27,7 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     # "takt" hat 3 Minuten Wartezeit, "sofort" keine (fuer Starts von Hand oder per Zeitplan)
     environment: ${{ (github.event_name == 'workflow_dispatch' && inputs.warten) && 'takt' || 'sofort' }}
-    timeout-minutes: 3
+    timeout-minutes: 12
     outputs:
       los: ${{ steps.pruefe.outputs.los }}
     steps:
@@ -50,12 +50,19 @@ jobs:
         if: ${{ !cancelled() && steps.pruefe.outputs.los != '1' && vars.TAKT != 'aus' }}
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh workflow run abfrage.yml -R "$GITHUB_REPOSITORY" --ref main -f warten=true
+        run: |
+          # GitHub antwortet manchmal kurz mit Fehler 500: mehrmals versuchen, damit die Kette nie abreisst
+          for i in 1 2 3 4 5 6 7 8; do
+            gh workflow run abfrage.yml -R "$GITHUB_REPOSITORY" --ref main -f warten=true && exit 0
+            echo "Einplanen ging nicht (Versuch $i), warte kurz"
+            sleep $((i * 15))
+          done
+          exit 1
   abfrage:
     needs: takt
     if: ${{ !cancelled() && needs.takt.outputs.los == '1' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       # Immer der neueste Stand (nicht der vom Moment der Einplanung), damit Reparaturen sofort greifen
       - uses: actions/checkout@v4
@@ -67,12 +74,17 @@ jobs:
           java-version: '25'
       - uses: gradle/actions/setup-gradle@v4
       - name: Bot fragt ab (nur kurz auf dem Server)
+        # Eigenes Zeitlimit: haengt der Bot, wird trotzdem gespeichert und der naechste Besuch eingeplant
+        timeout-minutes: 6
+        continue-on-error: true
         env:
           KS_SERVER: ${{ secrets.KS_SERVER }}
           KS_AUTH_SCHLUESSEL: ${{ secrets.KS_AUTH_SCHLUESSEL }}
           KS_DATEN_SCHLUESSEL: ${{ secrets.KS_DATEN_SCHLUESSEL }}
         run: ./gradlew -q installDist && ./build/install/mcstats/bin/mcstats abfrage 2>&1 | grep -vE 'SLF4J|INFO|WARNING' || true
       - name: Ergebnis speichern
+        if: ${{ !cancelled() }}
+        continue-on-error: true
         run: |
           git config user.name "statsbot"
           git config user.email "statsbot@users.noreply.github.com"
@@ -85,4 +97,11 @@ jobs:
         if: ${{ !cancelled() && vars.TAKT != 'aus' }}
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh workflow run abfrage.yml -R "$GITHUB_REPOSITORY" --ref main -f warten=true
+        run: |
+          # GitHub antwortet manchmal kurz mit Fehler 500: mehrmals versuchen, damit die Kette nie abreisst
+          for i in 1 2 3 4 5 6 7 8; do
+            gh workflow run abfrage.yml -R "$GITHUB_REPOSITORY" --ref main -f warten=true && exit 0
+            echo "Einplanen ging nicht (Versuch $i), warte kurz"
+            sleep $((i * 15))
+          done
+          exit 1

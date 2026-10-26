@@ -573,8 +573,12 @@ public class Main {
         kurz.addProperty("status", str(lauf, "status"));
         if (lauf.has("notaus")) kurz.add("notaus", lauf.get("notaus"));
         if (lauf.has("grund")) kurz.add("grund", lauf.get("grund"));
+        // Fuers Protokoll in der App: wer war da, Kontostand, wie lange
+        if (lauf.has("onlineAnzahl")) kurz.add("online", lauf.get("onlineAnzahl"));
+        if (lauf.has("kontostand")) kurz.add("kontostand", lauf.get("kontostand"));
+        if (lauf.has("dauerMs")) kurz.add("dauerMs", lauf.get("dauerMs"));
         laeufe.add(kurz);
-        while (laeufe.size() > 200) laeufe.remove(0);
+        while (laeufe.size() > 500) laeufe.remove(0);
         daten.add("laeufe", laeufe);
 
         Files.createDirectories(DATEN_DATEI.getParent());
