@@ -499,6 +499,18 @@ final class Sitzung {
             int imFenster = totemsUnten(f, totem);
             klick(fensterId, fensterState, slot, ContainerActionType.CLICK_ITEM, ClickItemAction.LEFT_CLICK);
             schlafe(800);
+            // Shop mit Fenster "Menge waehlen": genaue Menge einstellen, Preis pruefen, erst dann "Kaufen"
+            if (fenster != null && fenster != f && fensterTitel.toLowerCase().contains("menge")) {
+                int wunsch = Math.min(16, menge - gekauft);
+                String fehler = mengeEinstellen(wunsch, totem);
+                if (fehler != null) return ende(gekauft, totem, vorher, fehler);
+                int kaufen = slotMitName(fenster, "kaufen");
+                if (kaufen < 0) return ende(gekauft, totem, vorher, "Kaufen-Knopf nicht gefunden");
+                imFenster = totemsUnten(fenster, totem);
+                zeilenVorher = zeilen.size();
+                klick(fensterId, fensterState, kaufen, ContainerActionType.CLICK_ITEM, ClickItemAction.LEFT_CLICK);
+                schlafe(900);
+            }
             int neu = 0;
             for (String z : zeilen.subList(Math.min(zeilenVorher, zeilen.size()), zeilen.size())) {
                 Matcher m = GEKAUFT.matcher(z);
@@ -513,6 +525,65 @@ final class Sitzung {
             gekauft += neu;
         }
         return ende(gekauft, totem, vorher, null);
+    }
+
+    private static final Pattern MENGE = Pattern.compile("(?i)du kaufst:\\s*(\\d+)x");
+    private static final Pattern KAUFPREIS = Pattern.compile("(?i)(\\d+)x\\s*f(?:ü|ue)r\\s*\\$([\\d.,]+[KkMmBb]?)");
+
+    /** Stellt im Fenster "Menge waehlen" mit +1/-1 genau [n] ein und prueft den Preis. null = alles gut, sonst der Grund. */
+    private String mengeEinstellen(int n, int totem) throws InterruptedException {
+        for (int schritt = 0; schritt < 24 && aktiv; schritt++) {
+            int jetzt = mengeImFenster(totem);
+            if (jetzt < 0) return "Menge im Shop nicht lesbar";
+            if (jetzt == n) return preisPruefen(n);
+            int knopf = slotMitName(fenster, jetzt < n ? "+1" : "-1");
+            if (knopf < 0) return "Mengen-Knoepfe nicht gefunden";
+            klick(fensterId, fensterState, knopf, ContainerActionType.CLICK_ITEM, ClickItemAction.LEFT_CLICK);
+            for (int i = 0; i < 20 && mengeImFenster(totem) == jetzt; i++) schlafe(50);
+        }
+        return "Menge liess sich nicht einstellen";
+    }
+
+    private int mengeImFenster(int totem) {
+        ItemStack[] f = fenster;
+        if (f == null) return -1;
+        for (int i = 0; i < oben(f); i++) {
+            if (f[i] == null || f[i].getId() != totem) continue;
+            for (String z : lore(f[i])) {
+                Matcher m = MENGE.matcher(z);
+                if (m.find()) return Integer.parseInt(m.group(1));
+            }
+        }
+        return -1;
+    }
+
+    /** Der Kaufen-Knopf zeigt "Nx fuer $Preis": Menge muss stimmen, Preis darf nicht unerwartet hoch sein (max. 3000 $ pro Totem). */
+    private String preisPruefen(int n) {
+        int k = slotMitName(fenster, "kaufen");
+        if (k < 0) return "Kaufen-Knopf nicht gefunden";
+        for (String z : lore(fenster[k])) {
+            Matcher m = KAUFPREIS.matcher(z);
+            if (!m.find()) continue;
+            if (Integer.parseInt(m.group(1)) != n) return "Menge passt nicht, nichts gekauft";
+            double gesamt = Main.betrag(m.group(2));
+            if (gesamt > n * 3000.0) return "Preis unerwartet hoch ($" + m.group(2) + "), nichts gekauft";
+            return null;
+        }
+        return "Preis nicht lesbar, nichts gekauft";
+    }
+
+    private static int slotMitName(ItemStack[] f, String name) {
+        if (f == null) return -1;
+        for (int i = 0; i < oben(f); i++) if (f[i] != null && anzeigeName(f[i]).strip().equalsIgnoreCase(name)) return i;
+        return -1;
+    }
+
+    private static List<String> lore(ItemStack s) {
+        List<String> r = new ArrayList<>();
+        DataComponents d = s == null ? null : s.getDataComponentsPatch();
+        List<Component> l = d == null ? null : d.get(DataComponentTypes.LORE);
+        if (l != null) for (Component c : l) r.add(Main.text(c));
+        return r;
     }
 
     private String ende(int gekauft, int totem, int vorher, String grund) throws InterruptedException {
