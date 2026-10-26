@@ -22,13 +22,15 @@ import java.util.List;
  */
 final class Befehle {
 
-    record Befehl(String id, String art, int anzahl, String zeit) {}
+    /** [ziel]: Kennung eines Auftrags, auf den sich der Befehl bezieht (z. B. beim Abbrechen), sonst leer. */
+    record Befehl(String id, String art, int anzahl, String zeit, String ziel) {}
 
+    /** Mit KS_TESTKANAL=1 ein eigener Testkanal (wie in der Test-Version der App), damit Tests nie beim echten Bot landen. */
     static String kanal(byte[] schluessel) throws Exception {
         MessageDigest sha = MessageDigest.getInstance("SHA-256");
         sha.update("befehle:".getBytes(StandardCharsets.UTF_8));
         sha.update(Base64.getUrlEncoder().withoutPadding().encodeToString(schluessel).getBytes(StandardCharsets.UTF_8));
-        return "mcs-" + HexFormat.of().formatHex(sha.digest()).substring(0, 24);
+        return "mcs-" + HexFormat.of().formatHex(sha.digest()).substring(0, 24) + ("1".equals(System.getenv("KS_TESTKANAL")) ? "-test" : "");
     }
 
     /** Alle Befehle seit der letzten Nachricht (oder den letzten 12 Stunden). */
@@ -45,7 +47,8 @@ final class Befehle {
                 byte[] roh = Base64.getUrlDecoder().decode(n.get("message").getAsString().strip());
                 JsonObject b = JsonParser.parseString(new String(Main.entschluessele(roh, schluessel), StandardCharsets.UTF_8)).getAsJsonObject();
                 liste.add(new Befehl(n.get("id").getAsString(), b.get("befehl").getAsString(),
-                    b.has("anzahl") ? b.get("anzahl").getAsInt() : 1, b.has("zeit") ? b.get("zeit").getAsString() : ""));
+                    b.has("anzahl") ? b.get("anzahl").getAsInt() : 1, b.has("zeit") ? b.get("zeit").getAsString() : "",
+                    b.has("ziel") ? b.get("ziel").getAsString() : ""));
             } catch (Exception e) {
                 // Nicht mit unserem Schluessel verschluesselt: ignorieren
             }

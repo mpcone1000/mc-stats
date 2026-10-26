@@ -134,6 +134,7 @@ public class Main {
                 b.addProperty("befehl", args[1]);
                 b.addProperty("anzahl", args.length > 2 ? Integer.parseInt(args[2]) : 1);
                 b.addProperty("zeit", ZonedDateTime.now(ZONE).format(ISO));
+                if (args.length > 3) b.addProperty("ziel", args[3]);
                 String text = Base64.getUrlEncoder().withoutPadding().encodeToString(verschluessele(b.toString().getBytes(StandardCharsets.UTF_8), k));
                 var r = java.net.http.HttpClient.newHttpClient().send(java.net.http.HttpRequest.newBuilder(
                         java.net.URI.create("https://ntfy.sh/" + Befehle.kanal(k))).POST(java.net.http.HttpRequest.BodyPublishers.ofString(text)).build(),
@@ -143,6 +144,12 @@ public class Main {
             case "befehle" -> {
                 // Zum Pruefen: welche Befehle liegen im Kanal und lassen sich entschluesseln?
                 for (Befehle.Befehl b : Befehle.abholen(schluessel("KS_DATEN_SCHLUESSEL"), "12h")) System.out.println(b);
+            }
+            case "befehle-pruefen" -> {
+                // Trockenlauf ohne Server und ohne Speichern: wie wuerde der Bot die Befehle der letzten 12 Stunden verarbeiten?
+                DATEN = new JsonObject();
+                holeBefehle();
+                for (Sitzung.Auftrag a : AUFTRAEGE) System.out.println(a.id + " " + a.art + " x" + a.anzahl + " -> " + a.status + (a.ergebnis.isEmpty() ? "" : " (" + a.ergebnis + ")"));
             }
             case "historie" -> {
                 // Einmalig: Geld-Geschichte aus den PC-Logs (Export des PC-Mods) in die verschluesselten Daten legen
@@ -445,10 +452,11 @@ public class Main {
                 DATEN.addProperty("befehleSeit", b.id());
                 if (AUFTRAEGE.stream().anyMatch(a -> a.id.equals(b.id()))) continue;
                 if ("abbrechen".equals(b.art())) {
-                    // Alle bis dahin offenen Auftraege stoppen; wirkt sofort, auch wenn der Server aus ist
+                    // Offene Auftraege stoppen (alle oder nur den mit der Kennung "ziel"); wirkt auch, wenn der Server aus ist
                     int n = 0;
                     for (Sitzung.Auftrag a : AUFTRAEGE) {
                         if (!a.status.equals("offen")) continue;
+                        if (!b.ziel().isBlank() && !b.ziel().equals(a.id)) continue;
                         a.status = "abgebrochen";
                         a.ergebnis = "In der App abgebrochen";
                         n++;
