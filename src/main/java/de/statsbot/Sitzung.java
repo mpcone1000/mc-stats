@@ -387,7 +387,10 @@ final class Sitzung {
                     case "erkunden" -> erkunden();
                     case "heim" -> teleport("home", "nach Hause");
                     case "spawn" -> teleport("spawn", "zum Spawn");
-                    default -> "Unbekannter Befehl";
+                    // "kaufen:golden_carrot" usw.: beliebiges Item aus dem Shop (hoechstens 64, max. 5000 $ pro Stueck, 25.000 $ pro Auftrag)
+                    default -> a.art.startsWith("kaufen:")
+                        ? kaufe(a.art.substring(7), Math.max(1, Math.min(64, a.anzahl)), 5000, 25000)
+                        : "Unbekannter Befehl";
                 };
                 a.status = "erledigt";
             } catch (InterruptedException e) {
@@ -474,81 +477,130 @@ final class Sitzung {
         }
     }
 
-    /**
-     * Oeffnet /shop und kauft Totems. Sicher gegen Fehlkaeufe: Kategorien werden nur im Hauptmenue angeklickt,
-     * auf Unterseiten nur das Totem selbst oder "naechste Seite". Jeder Kauf wird geprueft (Chat oder Inventar);
-     * ohne Bestaetigung hoert der Bot sofort auf.
-     */
     private String totemsKaufen(int menge) throws InterruptedException {
-        int totem = Items.id(Items.TOTEM);
-        int vorher = anzahl(totem);
-        int gekauft = 0, ebene = 0, seiten = 0;
-        if (!oeffneShop()) return "Shop-Fenster ging nicht auf, nichts gekauft";
-        for (int versuch = 0; versuch < menge + 6 && gekauft < menge && aktiv; versuch++) {
+        return kaufe(Items.TOTEM, menge, 3000, 16 * 3000);
+    }
+
+    /**
+     * Kauft [menge] Stueck von [name] (Minecraft-Kennung) im /shop. Sicher gegen Fehlkaeufe:
+     * im Hauptmenue nur Kategorien, auf Kategorie-Seiten nur genau das gesuchte Item oder "naechste Seite",
+     * im Fenster "Menge waehlen" wird die Menge genau eingestellt und der Preis geprueft.
+     * Jeder Kauf muss bestaetigt sein (Chat-Meldung oder mehr im Inventar), sonst hoert der Bot sofort auf.
+     */
+    private String kaufe(String name, int menge, double maxProStueck, double maxGesamt) throws InterruptedException {
+        int id = Items.id(name);
+        if (id < 0) return "Unbekanntes Item: " + name;
+        int gekauft = 0;
+        double ausgegeben = 0;
+        for (int runde = 0; runde < 8 && gekauft < menge && aktiv; runde++) {
+            if (!findeSeite(id)) return ende(gekauft, gekauft == 0 ? "im Shop nicht gefunden" : null);
             ItemStack[] f = fenster;
-            if (f == null) return ende(gekauft, totem, vorher, "Shop wurde geschlossen");
-            int slot = suche(f, totem);
-            if (slot < 0) {
-                int ziel = ebene == 0 ? kategorie(f) : (seiten < 3 ? weiterKnopf(f) : -1);
-                if (ziel < 0) return ende(gekauft, totem, vorher, "Totem im Shop nicht gefunden");
-                if (!wechsle(ziel)) return ende(gekauft, totem, vorher, "Shop-Seite ging nicht auf");
-                if (ebene == 0) ebene = 1; else seiten++;
-                continue;
-            }
+            int slot = suche(f, id);
             int zeilenVorher = zeilen.size();
-            int imFenster = totemsUnten(f, totem);
+            int imFenster = anzahlUnten(f, id);
+            int stueck = Math.min(64, menge - gekauft);
             klick(fensterId, fensterState, slot, ContainerActionType.CLICK_ITEM, ClickItemAction.LEFT_CLICK);
             schlafe(800);
-            // Shop mit Fenster "Menge waehlen": genaue Menge einstellen, Preis pruefen, erst dann "Kaufen"
             if (fenster != null && fenster != f && fensterTitel.toLowerCase().contains("menge")) {
-                int wunsch = Math.min(16, menge - gekauft);
-                String fehler = mengeEinstellen(wunsch, totem);
-                if (fehler != null) return ende(gekauft, totem, vorher, fehler);
+                String fehler = mengeEinstellen(stueck, id);
+                if (fehler != null) return ende(gekauft, fehler);
+                double preis = gesamtPreis(stueck);
+                if (preis == -2) return ende(gekauft, "Menge passt nicht");
+                if (preis < 0) return ende(gekauft, "Preis nicht lesbar");
+                if (preis > stueck * maxProStueck || ausgegeben + preis > maxGesamt) return ende(gekauft, "Preis zu hoch ($" + Math.round(preis) + ")");
                 int kaufen = slotMitName(fenster, "kaufen");
-                if (kaufen < 0) return ende(gekauft, totem, vorher, "Kaufen-Knopf nicht gefunden");
-                imFenster = totemsUnten(fenster, totem);
+                if (kaufen < 0) return ende(gekauft, "Kaufen-Knopf nicht gefunden");
+                imFenster = anzahlUnten(fenster, id);
                 zeilenVorher = zeilen.size();
                 klick(fensterId, fensterState, kaufen, ContainerActionType.CLICK_ITEM, ClickItemAction.LEFT_CLICK);
                 schlafe(900);
+                ausgegeben += preis;
             }
             int neu = 0;
             for (String z : zeilen.subList(Math.min(zeilenVorher, zeilen.size()), zeilen.size())) {
                 Matcher m = GEKAUFT.matcher(z);
-                if (m.find() && m.group(2).toLowerCase().contains("totem")) neu += Integer.parseInt(m.group(1));
-                if (z.contains("fehlt dir Geld")) return ende(gekauft, totem, vorher, "Nicht genug Geld");
-                if (z.contains("nicht genug Platz")) return ende(gekauft, totem, vorher, "Inventar voll");
+                if (m.find() && m.group(2).toLowerCase().strip().replace(' ', '_').contains(name)) neu += Integer.parseInt(m.group(1));
+                if (z.contains("fehlt dir Geld")) return ende(gekauft, "nicht genug Geld");
+                if (z.contains("nicht genug Platz")) return ende(gekauft, "Inventar voll");
             }
             ItemStack[] danach = fenster;
-            if (neu == 0 && danach != null) neu = Math.max(0, totemsUnten(danach, totem) - imFenster);
-            // Kein bestaetigter Kauf (z. B. ein unbekanntes Bestaetigungs-Fenster): lieber sofort aufhoeren
-            if (neu == 0) return ende(gekauft, totem, vorher, "Kauf nicht bestaetigt (Fenster: " + fensterTitel + ")");
+            if (neu == 0 && danach != null) neu = Math.max(0, anzahlUnten(danach, id) - imFenster);
+            // Kein bestaetigter Kauf (z. B. ein unbekanntes Fenster): lieber sofort aufhoeren
+            if (neu == 0) return ende(gekauft, "Kauf nicht bestaetigt (Fenster: " + fensterTitel + ")");
             gekauft += neu;
+            schliesse();
+            schlafe(300);
         }
-        return ende(gekauft, totem, vorher, null);
+        return ende(gekauft, null);
+    }
+
+    /** Oeffnet den Shop und sucht die Seite mit dem Item: passende Kategorie zuerst, dann alle anderen. */
+    private boolean findeSeite(int id) throws InterruptedException {
+        if (!oeffneShop()) return false;
+        if (suche(fenster, id) >= 0) return true;
+        for (int k : kategorien(fenster, Items.name(id))) {
+            if (!wechsle(k)) {
+                if (!oeffneShop()) return false;
+                continue;
+            }
+            for (int seite = 0; seite < 3; seite++) {
+                if (suche(fenster, id) >= 0) return true;
+                int w = weiterKnopf(fenster);
+                if (w < 0 || !wechsle(w)) break;
+            }
+            if (!oeffneShop()) return false;
+        }
+        return false;
+    }
+
+    /** Kategorien im Hauptmenue ("Klick: oeffnen"), die zum Item passende zuerst. */
+    private static List<Integer> kategorien(ItemStack[] f, String item) {
+        List<Integer> liste = new ArrayList<>();
+        for (int i = 0; i < oben(f); i++) {
+            if (f[i] == null) continue;
+            if (lore(f[i]).stream().anyMatch(z -> z.toLowerCase().contains("öffnen") || z.toLowerCase().contains("oeffnen"))) liste.add(i);
+        }
+        if (liste.isEmpty()) {
+            int k = kategorie(f);
+            if (k >= 0) liste.add(k);
+            return liste;
+        }
+        String wunsch = item.matches(".*(carrot|apple|bread|beef|porkchop|chicken|mutton|salmon|cod|potato|stew|pie|cookie|melon|berries|kelp|soup|rabbit).*") ? "essen|food|nahrung"
+            : item.matches(".*(totem|sword|axe|pickaxe|shovel|hoe|helmet|chestplate|leggings|boots|shield|bow|arrow|trident|mace|pearl|bucket|bottle|charge|diamond|netherite).*") ? "ausrüstung|ausruestung|kampf|waffe|combat|equipment"
+            : item.matches(".*(redstone|piston|repeater|comparator|hopper|observer|lever|button|rail|dispenser|dropper).*") ? "redstone"
+            : item.matches(".*(sapling|propagule).*") ? "setzling"
+            : item.matches(".*(template).*") ? "vorlage"
+            : "blöcke|bloecke|block";
+        liste.sort((x, y) -> Boolean.compare(!anzeigeName(f[x]).toLowerCase().matches("(?s).*(" + wunsch + ").*"),
+            !anzeigeName(f[y]).toLowerCase().matches("(?s).*(" + wunsch + ").*")));
+        return liste;
     }
 
     private static final Pattern MENGE = Pattern.compile("(?i)du kaufst:\\s*(\\d+)x");
     private static final Pattern KAUFPREIS = Pattern.compile("(?i)(\\d+)x\\s*f(?:ü|ue)r\\s*\\$([\\d.,]+[KkMmBb]?)");
 
-    /** Stellt im Fenster "Menge waehlen" mit +1/-1 genau [n] ein und prueft den Preis. null = alles gut, sonst der Grund. */
-    private String mengeEinstellen(int n, int totem) throws InterruptedException {
-        for (int schritt = 0; schritt < 24 && aktiv; schritt++) {
-            int jetzt = mengeImFenster(totem);
+    /** Stellt im Fenster "Menge waehlen" mit den +/- Knoepfen genau [n] ein. null = geklappt, sonst der Grund. */
+    private String mengeEinstellen(int n, int id) throws InterruptedException {
+        for (int schritt = 0; schritt < 40 && aktiv; schritt++) {
+            int jetzt = mengeImFenster(id);
             if (jetzt < 0) return "Menge im Shop nicht lesbar";
-            if (jetzt == n) return preisPruefen(n);
-            int knopf = slotMitName(fenster, jetzt < n ? "+1" : "-1");
+            if (jetzt == n) return null;
+            int diff = n - jetzt;
+            String name = diff >= 64 ? "+64" : diff >= 16 ? "+16" : diff > 0 ? "+1" : diff <= -64 ? "-64" : diff <= -16 ? "-16" : "-1";
+            int knopf = slotMitName(fenster, name);
+            if (knopf < 0) knopf = slotMitName(fenster, diff > 0 ? "+1" : "-1");
             if (knopf < 0) return "Mengen-Knoepfe nicht gefunden";
             klick(fensterId, fensterState, knopf, ContainerActionType.CLICK_ITEM, ClickItemAction.LEFT_CLICK);
-            for (int i = 0; i < 20 && mengeImFenster(totem) == jetzt; i++) schlafe(50);
+            for (int i = 0; i < 20 && mengeImFenster(id) == jetzt; i++) schlafe(50);
         }
         return "Menge liess sich nicht einstellen";
     }
 
-    private int mengeImFenster(int totem) {
+    private int mengeImFenster(int id) {
         ItemStack[] f = fenster;
         if (f == null) return -1;
         for (int i = 0; i < oben(f); i++) {
-            if (f[i] == null || f[i].getId() != totem) continue;
+            if (f[i] == null || f[i].getId() != id) continue;
             for (String z : lore(f[i])) {
                 Matcher m = MENGE.matcher(z);
                 if (m.find()) return Integer.parseInt(m.group(1));
@@ -557,19 +609,17 @@ final class Sitzung {
         return -1;
     }
 
-    /** Der Kaufen-Knopf zeigt "Nx fuer $Preis": Menge muss stimmen, Preis darf nicht unerwartet hoch sein (max. 3000 $ pro Totem). */
-    private String preisPruefen(int n) {
+    /** Gesamtpreis laut Kaufen-Knopf ("Nx fuer $Preis"). -2 = Menge passt nicht, -1 = nicht lesbar. */
+    private double gesamtPreis(int n) {
         int k = slotMitName(fenster, "kaufen");
-        if (k < 0) return "Kaufen-Knopf nicht gefunden";
+        if (k < 0) return -1;
         for (String z : lore(fenster[k])) {
             Matcher m = KAUFPREIS.matcher(z);
             if (!m.find()) continue;
-            if (Integer.parseInt(m.group(1)) != n) return "Menge passt nicht, nichts gekauft";
-            double gesamt = Main.betrag(m.group(2));
-            if (gesamt > n * 3000.0) return "Preis unerwartet hoch ($" + m.group(2) + "), nichts gekauft";
-            return null;
+            if (Integer.parseInt(m.group(1)) != n) return -2;
+            return Main.betrag(m.group(2));
         }
-        return "Preis nicht lesbar, nichts gekauft";
+        return -1;
     }
 
     private static int slotMitName(ItemStack[] f, String name) {
@@ -586,10 +636,10 @@ final class Sitzung {
         return r;
     }
 
-    private String ende(int gekauft, int totem, int vorher, String grund) throws InterruptedException {
+    private String ende(int gekauft, String grund) throws InterruptedException {
         schliesse();
         schlafe(300);
-        String teil = gekauft > 0 ? gekauft + " Totem(s) gekauft" : "Nichts gekauft";
+        String teil = gekauft > 0 ? gekauft + " Stueck gekauft" : "Nichts gekauft";
         return teil + (grund != null ? " (" + grund + ")" : "");
     }
 
@@ -619,10 +669,10 @@ final class Sitzung {
         return b.toString();
     }
 
-    /** Totems im eigenen Inventar-Teil des offenen Fensters (unten). */
-    private static int totemsUnten(ItemStack[] f, int totem) {
+    /** So viele Stueck des Items im eigenen Inventar-Teil des offenen Fensters (unten). */
+    private static int anzahlUnten(ItemStack[] f, int id) {
         int n = 0;
-        for (int i = oben(f); i < f.length; i++) if (f[i] != null && f[i].getId() == totem) n += f[i].getAmount();
+        for (int i = oben(f); i < f.length; i++) if (f[i] != null && f[i].getId() == id) n += f[i].getAmount();
         return n;
     }
 
