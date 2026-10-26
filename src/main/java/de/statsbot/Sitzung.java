@@ -88,7 +88,7 @@ final class Sitzung {
     static final class Auftrag {
         final String id, art;
         final int anzahl;
-        String status = "offen", ergebnis = "";
+        String status = "offen", ergebnis = "", zeit = "";
 
         Auftrag(String id, String art, int anzahl) {
             this.id = id;

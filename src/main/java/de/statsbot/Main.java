@@ -443,7 +443,10 @@ public class Main {
         if (DATEN.has("auftraege")) {
             for (var e : DATEN.getAsJsonArray("auftraege")) {
                 JsonObject a = e.getAsJsonObject();
-                if ("offen".equals(str(a, "status"))) AUFTRAEGE.add(new Sitzung.Auftrag(str(a, "id"), str(a, "art"), a.has("anzahl") ? a.get("anzahl").getAsInt() : 1));
+                if (!"offen".equals(str(a, "status"))) continue;
+                Sitzung.Auftrag alt = new Sitzung.Auftrag(str(a, "id"), str(a, "art"), a.has("anzahl") ? a.get("anzahl").getAsInt() : 1);
+                alt.zeit = str(a, "zeit");
+                AUFTRAEGE.add(alt);
             }
         }
         try {
@@ -467,7 +470,9 @@ public class Main {
                     AUFTRAEGE.add(quittung);
                     continue;
                 }
-                AUFTRAEGE.add(new Sitzung.Auftrag(b.id(), b.art(), b.anzahl()));
+                Sitzung.Auftrag neu2 = new Sitzung.Auftrag(b.id(), b.art(), b.anzahl());
+                neu2.zeit = b.zeit();
+                AUFTRAEGE.add(neu2);
             }
             if (!neu.isEmpty()) System.out.println("Neue Befehle: " + neu.size());
         } catch (Exception e) {
@@ -494,7 +499,9 @@ public class Main {
             j.addProperty("anzahl", a.anzahl);
             j.addProperty("status", a.status);
             j.addProperty("ergebnis", a.ergebnis);
-            j.add("zeit", lauf.get("zeit"));
+            // Zeit, zu der der Auftrag geschickt wurde (aeltere Eintraege: Zeit des Laufs)
+            if (a.zeit.isBlank()) j.add("zeit", lauf.get("zeit"));
+            else j.addProperty("zeit", a.zeit);
             auftr.add(j);
         }
         while (auftr.size() > 30) auftr.remove(0);
